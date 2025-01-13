@@ -103,6 +103,26 @@ $ cleos push action endrmng.xsat evmrestkxsat '{"caller": "evmutil.xsat", "proxy
 # creditstake @auth custody.xsat 
 $ cleos push action endrmng.xsat creditstake '{"proxy": "e4d68a77714d9d388d8233bee18d578559950cf5", "staker": "bbbbbbbbbbbbbbbbbbbbbbbb5530ea015b900000",  "validator": "alice", "quantity": "0.00000020 XSAT"}' -p custody.xsat
 
+# newregvalidator @auth validator
+$ cleos push action endrmng.xsat newregvldtor '{"validator": "alice", "role": 0, "stake_addr": "e4d68a77714d9d388d8233bee18d578559950cf5", "reward_addr": "e4d68a77714d9d388d8233bee18d578559950cf5", "commission_rate": 2000}' -p alice
+
+# evmconfigvald @auth validator
+$ cleos push action endrmng.xsat evmconfigvald '{"validator": "alice", "commission_rate": 2000, "donate_rate": 100}' -p alice
+
+# evmsetstaker @auth validator
+$ cleos push action endrmng.xsat evmsetstaker '{"validator": "alice", "stake_addr": "e4d68a77714d9d388d8233bee18d578559950cf5"}' -p alice
+
+# setrwdaddr @auth validator
+$ cleos push action endrmng.xsat setrwdaddr '{"validator": "alice", "reward_addr": "e4d68a77714d9d388d8233bee18d578559950cf5"}' -p alice
+
+# setstakebase @auth get_self()
+$ cleos push action endrmng.xsat setstakebase '{"xsat_base_stake": "2100 XSAT", "btc_base_stake": "100 BTC"}' -p endrmng.xsat
+
+# updcreditstk @auth get_self()
+$ cleos push action endrmng.xsat updcreditstk '{"is_close": true}' -p endrmng.xsat
+
+# endorse @auth BLOCK_ENDORSE_CONTRACT
+$ cleos push action endrmng.xsat endorse '{"validator": "alice", "height": 840000}' -p block_endorse.xsat
 ```
 
 ## Table Information
@@ -442,6 +462,12 @@ const std::set<name> WHITELIST_TYPES = {"proxyreg"_n, "evmcaller"_n};
 - `{uint64_t} latest_reward_block` - latest reward block
 - `{time_point_sec} latest_reward_time` - latest reward time
 - `{bool} disabled_staking` - whether to disable staking
+- `{checksum160} stake_address` - stake address
+- `{checksum160} reward_address` - reward address
+- `{uint64_t} consecutive_vote_count` - consecutive vote count
+- `{uint64_t} latest_consensus_block` - latest consensus block
+- `{uint8_t} active_flag` - active flag
+- `{uint8_t} role` - role
 
 ### example
 
@@ -469,7 +495,13 @@ const std::set<name> WHITELIST_TYPES = {"proxyreg"_n, "evmcaller"_n};
   "latest_staking_time": "2024-07-13T09:16:26",
   "latest_reward_block": 840001,
   "latest_reward_time": "2024-07-13T14:29:32",
-  "disabled_staking": 0
+  "disabled_staking": 0,
+  "stake_address": "e4d68a77714d9d388d8233bee18d578559950cf5",
+  "reward_address": "e4d68a77714d9d388d8233bee18d578559950cf5",
+  "consecutive_vote_count": 1,
+  "latest_consensus_block": 840000,
+  "active_flag": 1,
+  "role": 0
  }
 ```
 
