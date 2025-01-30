@@ -270,7 +270,7 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
 
     void token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo);
 
-    reward_rate_t get_reward_rate();
+    reward_rate_t get_reward_rate(int version);
 
 #ifdef DEBUG
     template <typename T>

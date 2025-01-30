@@ -15,15 +15,15 @@ void reward_distribution::setrwdconfig(reward_config_row config) {
     _reward_config.set(config, get_self());
 }
 
-reward_distribution::reward_rate_t reward_distribution::get_reward_rate() {
-    reward_config_table _reward_config(get_self(), get_self().value);
-
+endorse_manage::consensus_config_row _get_consensus_config() {
     // consensus config
     endorse_manage::consensus_config_table _consensus_config
         = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
-    auto consensus_config = _consensus_config.get_or_default();
+    return _consensus_config.get_or_default();
+}
 
-    uint16_t version = consensus_config.version;
+reward_distribution::reward_rate_t reward_distribution::get_reward_rate(int version) {
+    reward_config_table _reward_config(get_self(), get_self().value);
     reward_config_row reward_config{};
     if (_reward_config.exists()) {
         reward_config = _reward_config.get();
@@ -33,8 +33,9 @@ reward_distribution::reward_rate_t reward_distribution::get_reward_rate() {
 
     if (reward_config.cached_version <= 1)
         return reward_config.v1;
-    else
+    else {
         return reward_config.v2;
+    }
 }
 
 //@auth utxomng.xsat
@@ -42,7 +43,9 @@ reward_distribution::reward_rate_t reward_distribution::get_reward_rate() {
 void reward_distribution::distribute(const uint64_t height) {
     require_auth(UTXO_MANAGE_CONTRACT);
 
-    reward_rate_t reward_rate = get_reward_rate();
+    endorse_manage::consensus_config_row consensus_config = _get_consensus_config();
+    reward_rate_t reward_rate = get_reward_rate(consensus_config.version);
+    bool enable_exsat_consensus_reward = (consensus_config.flags & consensus_config.xsat_consensus_mask);
 
     check(_btc_reward_log.find(height) == _btc_reward_log.end(),
           "rwddist.xsat::distribute: the current block has been allocated rewards");
@@ -81,8 +84,10 @@ void reward_distribution::distribute(const uint64_t height) {
         //  consensus reward (for btc staking validators)
         btc_consensus_rewards = uint128_t(nSubsidy) * reward_rate.btc_consensus_reward_rate / RATE_BASE;
 
-        //  xsat consensus reward (for xsat staking validators)
-        xsat_consensus_rewards = uint128_t(nSubsidy) * reward_rate.xsat_consensus_reward_rate / RATE_BASE;
+        if (enable_exsat_consensus_reward) {
+            //  xsat consensus reward (for xsat staking validators)
+            xsat_consensus_rewards = uint128_t(nSubsidy) * reward_rate.xsat_consensus_reward_rate / RATE_BASE;
+        }
 
         // staking reward (for btc staking validators)
         btc_staking_rewards = nSubsidy - synchronizer_rewards - btc_consensus_rewards - xsat_consensus_rewards;
@@ -92,8 +97,10 @@ void reward_distribution::distribute(const uint64_t height) {
     distribute_per_symbol(chain_state, height, true, synchronizer_rewards, btc_staking_rewards, btc_consensus_rewards,
                           _btc_reward_log, _btc_reward_balance);
 
-    // to XSAT validators
-    distribute_per_symbol(chain_state, height, false, 0, 0, xsat_consensus_rewards, _xsat_reward_log, _xsat_reward_balance);
+    if (enable_exsat_consensus_reward && xsat_consensus_rewards > 0) {
+        // to XSAT validators
+        distribute_per_symbol(chain_state, height, false, 0, 0, xsat_consensus_rewards, _xsat_reward_log, _xsat_reward_balance);
+    }
 }
 
 template <typename ChainStateRow>
