@@ -1236,14 +1236,20 @@ void endorse_manage::evmregvldtor(const name& validator, const uint32_t role, co
 
 //@auth validator
 [[eosio::action]]
-void endorse_manage::evmconfigvald(const name& validator, const uint16_t commission_rate, const uint16_t donate_rate) {
+void endorse_manage::evmconfigvald(const name& validator, const optional<uint16_t>& commission_rate, const optional<uint16_t>& donate_rate) {
     require_auth(validator);
 
+    check(commission_rate.has_value() || donate_rate.has_value(), "endrmng.xsat::evmconfigvald: commission_rate or donate_rate is required");
     auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::evmconfigvald: [validators] does not exists");
 
     _validator.modify(validator_itr, same_payer, [&](auto& row) {
-        row.commission_rate = commission_rate;
-        row.donate_rate = donate_rate;
+        if (commission_rate.has_value()) {
+            row.commission_rate = commission_rate.value();
+        }
+
+        if (donate_rate.has_value()) {
+            row.donate_rate = donate_rate.value();
+        }
     });
 }
 
@@ -1253,7 +1259,9 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
 
     auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::evmsetstaker: [validators] does not exists");
 
-    check(validator_itr->qualification.amount == 0, "endrmng.xsat::evmsetstaker: the validator's qualification must be 0");
+    // credit staking validator or stake address staking amount equal 0
+    check((validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 2) || validator_itr->qualification.amount == 0, 
+        "endrmng.xsat::evmsetstaker: the validator's qualification must be 0");
 
     _validator.modify(validator_itr, same_payer, [&](auto& row) { row.stake_address = stake_addr; });
 }
@@ -1336,19 +1344,48 @@ void endorse_manage::upgradev2() {
     auto config = _consensus_config.get_or_default();
     check(config.version == 1, "endrmng.xsat::upgratev2: the current version is not 1");
 
+    // credit proxies
+    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
+
+    // evm staking
+    auto evm_staker_idx = _evm_stake.get_index<"byvalidator"_n>();
+
     auto validator_itr = _validator.begin();
     while (validator_itr != _validator.end()) {
 
         auto active = 0;
-        if (validator_itr->qualification >= config.btc_base_stake) {
-            active = 1;
+        auto quantity = validator_itr->quantity;
+
+        if (quantity >= config.btc_base_stake) {
+            active = 2;
+        }
+
+        // check credit staking
+        auto evm_staker_itr = evm_staker_idx.find(validator_itr->owner.value);
+
+        if (evm_staker_itr != evm_staker_idx.end()) {
+
+            while (evm_staker_itr != evm_staker_idx.end() && evm_staker_itr->validator == validator_itr->owner) {
+                // check proxy are credit proxies
+                auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(evm_staker_itr->proxy));
+                if (credit_proxy_itr != credit_proxy_idx.end()) {
+                    // if exist, subtract the staking quantity
+                    quantity -= evm_staker_itr->quantity;
+                }
+                evm_staker_itr++;
+            }
+
+            if (quantity >= config.btc_base_stake) {
+                active = 1;
+            }
+
         }
 
         _validator.modify(validator_itr, get_self(), [&](auto& row) {
             // Default validator role is 0 (BTC)
             row.role = 0;
             row.reward_address = xsat::utils::evm_address_to_checksum160(row.memo);
-            row.stake_address = xsat::utils::evm_address_to_checksum160(row.memo);
+            // row.stake_address = xsat::utils::evm_address_to_checksum160(row.memo);
             row.consecutive_vote_count = 0;
             row.latest_consensus_block = 0;
             row.active_flag = active;
@@ -1359,4 +1396,26 @@ void endorse_manage::upgradev2() {
     // 4) Update the version from 1 to 2, indicating the upgrade is done
     config.version = 2;
     _consensus_config.set(config, get_self());
+}
+[[eosio::action]]
+void endorse_manage::endorse(const name& validator, const uint64_t height) {
+
+    require_auth(BLOCK_ENDORSE_CONTRACT);
+    auto validator_itr = _validator.find(validator.value);
+
+    if (validator_itr == _validator.end()) {
+        return;
+    }
+    
+    // check height
+    if (validator_itr->latest_consensus_block.has_value() && height == validator_itr->latest_consensus_block.value()) {
+        return;
+    }
+
+    _validator.modify(validator_itr, get_self(), [&](auto& row) {
+        bool is_consecutive = row.latest_consensus_block.has_value() && (height == row.latest_consensus_block.value() + 1);
+        row.consecutive_vote_count = is_consecutive ? row.consecutive_vote_count.value_or(0ULL) + 1ULL : 1ULL;
+        row.latest_consensus_block = height;
+    });
+
 }

@@ -395,6 +395,8 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         binary_extension<checksum160> reward_address;
         binary_extension<uint64_t> consecutive_vote_count;
         binary_extension<uint64_t> latest_consensus_block;
+
+        // 0: inactive, 1: active, 2: credit staking validator
         binary_extension<uint8_t> active_flag;
 
         // 0: BTC, 1: XSAT
@@ -1220,7 +1222,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
                       const optional<checksum160>& reward_addr, const optional<uint16_t>& commission_rate);
 
     [[eosio::action]]
-    void evmconfigvald(const name& validator, const uint16_t commission_rate, const uint16_t donate_rate);
+    void evmconfigvald(const name& validator, const optional<uint16_t>& commission_rate, const optional<uint16_t>& donate_rate);
 
     [[eosio::action]]
     void evmsetstaker(const name& validator, const checksum160& stake_addr);
@@ -1236,6 +1238,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     [[eosio::action]]
     void upgradev2();
+
+    [[eosio::action]]
+    void endorse(const name& validator, const uint64_t height);
 
     // logs
     [[eosio::action]]
@@ -1386,6 +1391,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     using erstkxsatlog_action = eosio::action_wrapper<"erstkxsatlog"_n, &endorse_manage::erstkxsatlog>;
 
     using regvldtorlog_action = eosio::action_wrapper<"regvldtorlog"_n, &endorse_manage::regvldtorlog>;
+    using endorse_action = eosio::action_wrapper<"endorse"_n, &endorse_manage::endorse>;
 
     static checksum256 compute_staking_id(const checksum160& proxy, const checksum160& staker, const name& validator) {
         vector<char> result;

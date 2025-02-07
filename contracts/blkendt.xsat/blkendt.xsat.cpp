@@ -145,7 +145,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         auto itr = std::find_if(endorsement_itr->requested_validators.begin(), endorsement_itr->requested_validators.end(),
                                 [&](const requested_validator_info& a) { return a.account == validator; });
         check(itr != endorsement_itr->requested_validators.end(),
-              "1007:blkendt.xsat::endorse: the validator has less than 100 BTC staked");
+              "1007:blkendt.xsat::endorse: the validator is not in the requested validators list");
         endorsement_idx.modify(endorsement_itr, same_payer, [&](auto& row) {
             row.provider_validators.push_back(
                 {.account = itr->account, .staking = itr->staking, .created_at = current_time_point()});
@@ -155,10 +155,11 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     }
 
     if (reached_consensus) {
+         bool enable_exsat_consensus_reward = (consensus_config.flags & consensus_config.xsat_consensus_mask);
         // Need check other consensus
-        if (consensus_config.flags == 1) {
+        if (enable_exsat_consensus_reward) {
 
-            // TODO: Get the number of other consensus and check
+            // Get the number of other consensus and check
             block_endorse::endorsement_table _other_endorsement(get_self(), _endorse_scope);
             auto other_endorsement_idx = _other_endorsement.get_index<"byhash"_n>();
             auto other_endorsement_itr = other_endorsement_idx.find(hash);
@@ -172,6 +173,10 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         utxo_manage::consensus_action _consensus(UTXO_MANAGE_CONTRACT, {get_self(), "active"_n});
         _consensus.send(height, hash);
     }
+
+    // send endrmng.xsat::endorse
+    endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
+    _endorse.send(validator, height);
 }
 
 std::vector<block_endorse::requested_validator_info>
@@ -181,6 +186,12 @@ block_endorse::get_valid_validator_by_btc_stake(const uint64_t min_btc_qualifica
     auto idx = _validator.get_index<"byqualifictn"_n>();
     auto itr = idx.lower_bound(min_btc_qualification);
     std::vector<requested_validator_info> result;
+
+    // endrmng.xsat consensus config
+    endorse_manage::consensus_config_table _consensus_config
+        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+    auto consensus_config = _consensus_config.get_or_default();
+
     while (itr != idx.end()) {
 
         // only btc validator
@@ -190,7 +201,12 @@ block_endorse::get_valid_validator_by_btc_stake(const uint64_t min_btc_qualifica
         }
 
         // check active
-        if (itr->role.has_value() && itr->active_flag.value() == 0) {
+        if (itr->active_flag.has_value() && itr->active_flag.value() == 0) {
+
+            continue;
+        }
+
+        if (itr->consecutive_vote_count.has_value() && itr->consecutive_vote_count.value() < consensus_config.validator_active_vote_count) {
 
             continue;
         }
@@ -209,6 +225,12 @@ block_endorse::get_valid_validator_by_xsat_stake(const uint64_t min_xsat_qualifi
     auto idx = _validator.get_index<"bystakedxsat"_n>();
     auto itr = idx.lower_bound(min_xsat_qualification);
     std::vector<requested_validator_info> result;
+
+    // endrmng.xsat consensus config
+    endorse_manage::consensus_config_table _consensus_config
+        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+    auto consensus_config = _consensus_config.get_or_default();
+
     while (itr != idx.end()) {
         // only xsat validator
         if (itr->role.has_value() && itr->role.value() != 1) {
@@ -217,7 +239,12 @@ block_endorse::get_valid_validator_by_xsat_stake(const uint64_t min_xsat_qualifi
         }
 
         // check active
-        if (itr->role.has_value() && itr->active_flag.value() == 0) {
+        if (itr->active_flag.has_value() && itr->active_flag.value() == 0) {
+
+            continue;
+        }
+
+        if (itr->consecutive_vote_count.has_value() && itr->consecutive_vote_count.value() < consensus_config.validator_active_vote_count) {
 
             continue;
         }
