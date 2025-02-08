@@ -1,4 +1,5 @@
 #include <blkendt.xsat/blkendt.xsat.hpp>
+#include <poolreg.xsat/poolreg.xsat.hpp>
 #include <endrmng.xsat/endrmng.xsat.hpp>
 #include <rescmng.xsat/rescmng.xsat.hpp>
 #include <utxomng.xsat/utxomng.xsat.hpp>
@@ -73,9 +74,14 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     auto validator_itr = _validator.require_find(validator.value, "blkendt.xsat::endorse: [validators] does not exists");
 
     // get endorsement scope
-    bool xsat_validator = validator_itr->role.value() == 1;
+    bool xsat_validator = false;
+    if (validator_itr->role.has_value() && validator_itr->role.value() == 1) {
+        xsat_validator = true;
+    }
+
     auto _endorse_scope = height;
     auto _other_endorse_scope = height | 0x100000000;
+
     if (xsat_validator) {
 
         _endorse_scope = height | 0x100000000;
@@ -255,3 +261,101 @@ block_endorse::get_valid_validator_by_xsat_stake(const uint64_t min_xsat_qualifi
     }
     return result;
 }
+
+[[eosio::action]]
+void block_endorse::revote(const name& synchronizer, const uint64_t height) {
+    // 权限验证
+    require_auth(synchronizer);
+
+    // 验证同步节点
+    pool::synchronizer_table _synchronizer(POOL_REGISTER_CONTRACT, POOL_REGISTER_CONTRACT.value);
+    _synchronizer.require_find(synchronizer.value, "block_endorse::revote: not a synchronizer account");
+
+    // 获取链状态，检查当前区块是否处于不可投票状态
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+    check(chain_state.irreversible_height < height && chain_state.migrating_height != height,
+          "1002:blkendt.xsat::revote: the current block is irreversible");
+
+    // 获取 revote_record 表实例（作用域为当前合约）
+    revote_record_table _revote_record(get_self(), get_self().value);
+    // 获取按 height 索引的子表
+    auto height_index = _revote_record.get_index<"byheight"_n>();
+
+    // 使用 lower_bound 与 upper_bound 获取所有高度为 height 的记录
+    auto lb = height_index.lower_bound(height);
+    auto ub = height_index.upper_bound(height);
+    auto pending_itr = std::find_if(lb, ub, [](const auto& rec) {
+        return rec.status == 0;
+    });
+
+    // 计算同步节点总数及达到共识所需票数
+    const uint64_t total_synchronizers = std::distance(_synchronizer.begin(), _synchronizer.end());
+    const uint64_t required_votes = (total_synchronizers / 2) + 1;
+
+    // 记录当前时间（确保操作一致性）
+    const auto now = time_point_sec(current_time_point());
+
+    // 如果没有 pending 记录，则新建一条记录并记录首次投票
+    if (pending_itr == ub) {
+        _revote_record.emplace(get_self(), [&](auto& rec) {
+            rec.id            = _revote_record.available_primary_key();
+            rec.height        = height;
+            rec.synchronizers = { synchronizer };
+            rec.status        = 0;
+            rec.created_at    = now;
+            rec.updated_at    = now;
+        });
+        return;
+    }
+
+    // 检查当前同步节点是否已经投票，避免重复计票
+    if (std::find(pending_itr->synchronizers.begin(),
+                  pending_itr->synchronizers.end(),
+                  synchronizer) != pending_itr->synchronizers.end()) {
+        return;
+    }
+
+    // 更新记录，加入新的投票
+    bool consensus_reached = false;
+    height_index.modify(pending_itr, get_self(), [&](auto& rec) {
+        rec.synchronizers.push_back(synchronizer);
+        rec.updated_at = now;
+        if (rec.synchronizers.size() >= required_votes) {
+            rec.status = 1;
+            consensus_reached = true;
+        }
+    });
+
+    // 达成共识后，执行 endorsement 数据迁移（包括多个 scope 的处理）
+    if (consensus_reached) {
+        process_revote_consensus(height);
+    }
+}
+
+void block_endorse::process_revote_consensus(const uint64_t height) {
+    // BTC
+    migrate_endorsements(height);
+    // XSAT
+    migrate_endorsements(height | 0x100000000);
+}
+
+
+void block_endorse::migrate_endorsements(const uint64_t src_scope) {
+    endorsement_table src_endorsements(get_self(), src_scope);
+
+    // 定义目标 scope，这里采用添加高位标记的方式（你也可以自定义其他算法）
+    const uint64_t FINAL_MASK = 1ULL << 63;
+    uint64_t dest_scope = src_scope | FINAL_MASK;
+    endorsement_table dest_endorsements(get_self(), dest_scope);
+
+    // 遍历源 endorsement 表，逐条复制到目标表后删除原记录
+    auto it = src_endorsements.begin();
+    while (it != src_endorsements.end()) {
+        dest_endorsements.emplace(get_self(), [&](auto& new_row) {
+            new_row = *it; // 整体拷贝 endorsement_row 结构体内容
+        });
+        it = src_endorsements.erase(it);
+    }
+}
+
