@@ -145,6 +145,50 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
         "endorsements"_n, endorsement_row,
         eosio::indexed_by<"byhash"_n, const_mem_fun<endorsement_row, checksum256, &endorsement_row::by_hash>>>
         endorsement_table;
+        
+    /**
+     * ## TABLE `revote_record`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint64_t} id` - primary key
+     * - `{uint64_t} height` - height
+     * - `{std::vector<name>} synchronizers` - synchronizers
+     * - `{uint8_t} status` - status
+     * - `{time_point_sec} created_at` - created at time
+     * - `{time_point_sec} updated_at` - updated at time
+     *
+     * ### example
+     *
+     * ```json
+     * {
+     *   "id": 0,
+     *   "height": 840000,
+     *   "synchronizers": ["alice", "bob"],
+     *   "status": 0,
+     *   "created_at": "2024-08-13T00:00:00",
+     *   "updated_at": "2024-08-13T00:00:00"
+     * }
+     * ```
+     */
+    struct [[eosio::table]] revote_record {
+        uint64_t           id;
+        uint64_t           height;
+
+        std::vector<name>  synchronizers;
+        uint8_t            status;      // 0: pending, 1: success, 2: failed
+        time_point_sec     created_at;
+        time_point_sec     updated_at;
+
+        uint64_t primary_key() const { return id; }
+        uint64_t by_height()   const { return height; }
+    };
+
+    typedef eosio::multi_index<
+        "revoterecord"_n, revote_record,
+        indexed_by<"byheight"_n, const_mem_fun<revote_record, uint64_t, &revote_record::by_height>>
+    > revote_record_table;
 
     /**
      * ## ACTION `config`
@@ -220,11 +264,34 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
     void cleartable(const name table_name, const optional<uint64_t> scope, const optional<uint64_t> max_rows);
 #endif
 
+    /**
+     * ## ACTION `revote`
+     *
+     * - **authority**: `synchronizer`
+     *
+     * > To initiate a revote for a specific height
+     *
+     * ### params
+     *
+     * - `{name} synchronizer` - synchronizer account
+     * - `{uint64_t} height` - height
+     *
+     * ### example  
+     *
+     * ```bash
+     * $ cleos push action blkendt.xsat revote '["alice", 840000]' -p alice
+     * ```
+     */
+    [[eosio::action]]
+    void revote(const name& synchronizer, const uint64_t height);
+
     using erase_action = eosio::action_wrapper<"erase"_n, &block_endorse::erase>;
 
    private:
-    std::vector<requested_validator_info> get_valid_validator_by_btc_stake();
+    std::vector<requested_validator_info> get_valid_validator_by_btc_stake(const uint64_t min_btc_qualification);
     std::vector<requested_validator_info> get_valid_validator_by_xsat_stake(const uint64_t min_xsat_qualification);
+    void process_revote_consensus(const uint64_t height);
+    void migrate_endorsements(const uint64_t src_scope);
 
 #ifdef DEBUG
     template <typename T>

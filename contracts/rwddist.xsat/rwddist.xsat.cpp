@@ -1,13 +1,13 @@
-#include <rwddist.xsat/rwddist.xsat.hpp>
-#include <exsat.xsat/exsat.xsat.hpp>
 #include <blkendt.xsat/blkendt.xsat.hpp>
+#include <exsat.xsat/exsat.xsat.hpp>
+#include <rwddist.xsat/rwddist.xsat.hpp>
 #include <utxomng.xsat/utxomng.xsat.hpp>
 
 #ifdef DEBUG
 #include "./src/debug.hpp"
 #endif
 
-[[eosio::action]] 
+[[eosio::action]]
 void reward_distribution::setrwdconfig(reward_config_row config) {
     require_auth(get_self());
 
@@ -15,15 +15,15 @@ void reward_distribution::setrwdconfig(reward_config_row config) {
     _reward_config.set(config, get_self());
 }
 
-reward_distribution::reward_rate_t reward_distribution::get_reward_rate() {
+endorse_manage::consensus_config_row _get_consensus_config() {
+    // consensus config
+    endorse_manage::consensus_config_table _consensus_config
+        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+    return _consensus_config.get_or_default();
+}
+
+reward_distribution::reward_rate_t reward_distribution::get_reward_rate(int version) {
     reward_config_table _reward_config(get_self(), get_self().value);
-
-    consensus_config_table _consensus_config(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
-
-    uint16_t version = 0;
-    if (_consensus_config.exists()) {
-        version = _consensus_config.get().version;
-    }
     reward_config_row reward_config{};
     if (_reward_config.exists()) {
         reward_config = _reward_config.get();
@@ -31,10 +31,11 @@ reward_distribution::reward_rate_t reward_distribution::get_reward_rate() {
     reward_config.cached_version = version;
     _reward_config.set(reward_config, get_self());
 
-    if (reward_config.cached_version <= 1) 
+    if (reward_config.cached_version <= 1)
         return reward_config.v1;
-    else 
+    else {
         return reward_config.v2;
+    }
 }
 
 //@auth utxomng.xsat
@@ -42,7 +43,9 @@ reward_distribution::reward_rate_t reward_distribution::get_reward_rate() {
 void reward_distribution::distribute(const uint64_t height) {
     require_auth(UTXO_MANAGE_CONTRACT);
 
-    reward_rate_t reward_rate = get_reward_rate();
+    endorse_manage::consensus_config_row consensus_config = _get_consensus_config();
+    reward_rate_t reward_rate = get_reward_rate(consensus_config.version);
+    bool enable_exsat_consensus_reward = (consensus_config.flags & consensus_config.xsat_consensus_mask);
 
     check(_btc_reward_log.find(height) == _btc_reward_log.end(),
           "rwddist.xsat::distribute: the current block has been allocated rewards");
@@ -81,33 +84,34 @@ void reward_distribution::distribute(const uint64_t height) {
         //  consensus reward (for btc staking validators)
         btc_consensus_rewards = uint128_t(nSubsidy) * reward_rate.btc_consensus_reward_rate / RATE_BASE;
 
-        //  xsat consensus reward (for xsat staking validators)
-        xsat_consensus_rewards = uint128_t(nSubsidy) * reward_rate.xsat_consensus_reward_rate / RATE_BASE;
+        if (enable_exsat_consensus_reward) {
+            //  xsat consensus reward (for xsat staking validators)
+            xsat_consensus_rewards = uint128_t(nSubsidy) * reward_rate.xsat_consensus_reward_rate / RATE_BASE;
+        }
 
         // staking reward (for btc staking validators)
         btc_staking_rewards = nSubsidy - synchronizer_rewards - btc_consensus_rewards - xsat_consensus_rewards;
     }
 
     // to BTC validators
-    distribute_per_symbol(chain_state, height, true, synchronizer_rewards, btc_staking_rewards, btc_consensus_rewards, _btc_reward_log, _btc_reward_balance);
+    distribute_per_symbol(chain_state, height, true, synchronizer_rewards, btc_staking_rewards, btc_consensus_rewards,
+                          _btc_reward_log, _btc_reward_balance);
 
-    // to XSAT validators
-    distribute_per_symbol(chain_state, height, false, 0, 0, xsat_consensus_rewards, _xsat_reward_log, _xsat_reward_balance);
+    if (enable_exsat_consensus_reward && xsat_consensus_rewards > 0) {
+        // to XSAT validators
+        distribute_per_symbol(chain_state, height, false, 0, 0, xsat_consensus_rewards, _xsat_reward_log, _xsat_reward_balance);
+    }
 }
 
 template <typename ChainStateRow>
-void reward_distribution::distribute_per_symbol(
-        const ChainStateRow &chain_state, const uint64_t height, bool is_btc, 
-        int64_t synchronizer_rewards,
-        int64_t staking_rewards,
-        int64_t consensus_rewards, 
-        reward_log_table &_reward_log, 
-        reward_balance_table &_reward_balance)
-{
+void reward_distribution::distribute_per_symbol(const ChainStateRow& chain_state, const uint64_t height, bool is_btc,
+                                                int64_t synchronizer_rewards, int64_t staking_rewards, int64_t consensus_rewards,
+                                                reward_log_table& _reward_log, reward_balance_table& _reward_balance) {
     auto hash = chain_state.migrating_hash;
 
     // FIXME: height lookup
-    block_endorse::endorsement_table _endorsement(BLOCK_ENDORSE_CONTRACT, (is_btc ? height : height | 0x100000000));//blkendt.xsat
+    block_endorse::endorsement_table _endorsement(
+        BLOCK_ENDORSE_CONTRACT, (is_btc ? height : height | 0x100000000)); // blkendt.xsat
     auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
     auto endorsement_itr = endorsement_idx.find(hash);
 
@@ -124,8 +128,8 @@ void reward_distribution::distribute_per_symbol(
     provider_validators.reserve(endorsement_itr->provider_validators.size());
     for (size_t i = 0; i < endorsement_itr->provider_validators.size(); ++i) {
         const auto validator = endorsement_itr->provider_validators[i];
-        provider_validators.emplace_back(validator_info{
-            .account = validator.account, .staking = validator.staking, .created_at = validator.created_at});
+        provider_validators.emplace_back(
+            validator_info{.account = validator.account, .staking = validator.staking, .created_at = validator.created_at});
 
         endorsed_staking += validator.staking;
         if (i < num_reached_consensus || !is_btc) {
@@ -160,6 +164,13 @@ void reward_distribution::distribute_per_symbol(
 void reward_distribution::endtreward(const uint64_t height, uint32_t from_index, const uint32_t to_index) {
     require_auth(UTXO_MANAGE_CONTRACT);
     endtreward_per_symbol(height, from_index, to_index, true, _btc_reward_log, _btc_reward_balance);
+
+    // XSAT consensus reward
+    // TODO:  
+    auto itr = _xsat_reward_log.find(height);
+    if (itr != _xsat_reward_log.end()) {
+        endtreward_per_symbol(height, from_index, to_index, false, _xsat_reward_log, _xsat_reward_balance);
+    }
 }
 
 [[eosio::action]]
@@ -168,11 +179,10 @@ void reward_distribution::endtreward2(const uint64_t height, uint32_t from_index
     endtreward_per_symbol(height, from_index, to_index, false, _xsat_reward_log, _xsat_reward_balance);
 }
 
-void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t from_index, const uint32_t to_index, 
-        bool is_btc_validators, reward_log_table &_reward_log, reward_balance_table &_reward_balance)
-{
-    auto reward_log_itr
-        = _reward_log.require_find(height, "rwddist.xsat::endtreward: no rewards are being distributed");
+void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t from_index, const uint32_t to_index,
+                                                bool is_btc_validators, reward_log_table& _reward_log,
+                                                reward_balance_table& _reward_balance) {
+    auto reward_log_itr = _reward_log.require_find(height, "rwddist.xsat::endtreward: no rewards are being distributed");
 
     check(reward_log_itr->num_validators_assigned < reward_log_itr->provider_validators.size(),
           "rwddist.xsat::endtreward: the current block has distributed rewards");
@@ -187,6 +197,11 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
 
     auto reward_balance = _reward_balance.get_or_default();
     asset total_rewards = {0, reward_log_itr->staking_rewards.symbol};
+
+    // Calculate consensus rewards by dividing total consensus rewards evenly among all validators
+    int64_t consensus_reward_amount
+        = uint128_t(reward_log_itr->consensus_rewards.amount) / reward_log_itr->provider_validators.size();
+
     for (; from_index < to_index; from_index++) {
         auto validator = reward_log_itr->provider_validators[from_index];
         // endorse / consensus staking
@@ -195,17 +210,15 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
 
         // calculate the number of rewards
         int64_t staking_reward_amount = 0;
-        int64_t consensus_reward_amount = 0;
 
         // The last one to distribute the remaining rewards
         if (from_index != reward_log_itr->provider_validators.size() - 1) {
-            staking_reward_amount = uint128_t(reward_log_itr->staking_rewards.amount) * endorse_staking
-                                    / reward_log_itr->endorsed_staking;
-            consensus_reward_amount = uint128_t(reward_log_itr->consensus_rewards.amount) * consensus_staking
-                                      / reward_log_itr->reached_consensus_staking;
+
+            staking_reward_amount
+                = uint128_t(reward_log_itr->staking_rewards.amount) * endorse_staking / reward_log_itr->endorsed_staking;
         } else {
+
             staking_reward_amount = reward_balance.staking_rewards_unclaimed.amount;
-            consensus_reward_amount = reward_balance.consensus_rewards_unclaimed.amount;
         }
 
         reward_details.emplace_back(endorse_manage::reward_details_row{
@@ -234,14 +247,13 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
         // transfer to poolreg.xsat
         if (reward_log_itr->synchronizer_rewards.amount > 0) {
             token_transfer(get_self(), POOL_REGISTER_CONTRACT, {reward_log_itr->synchronizer_rewards, EXSAT_CONTRACT},
-                        reward_log_itr->parser.to_string() + "," + std::to_string(height));
+                           reward_log_itr->parser.to_string() + "," + std::to_string(height));
         }
 
         // log
         reward_distribution::rewardlog_action _rewardlog(get_self(), {get_self(), "active"_n});
-        _rewardlog.send(height, reward_log_itr->hash, reward_log_itr->synchronizer, reward_log_itr->miner,
-                        reward_log_itr->parser, reward_log_itr->synchronizer_rewards, reward_log_itr->staking_rewards,
-                        reward_log_itr->consensus_rewards);
+        _rewardlog.send(height, reward_log_itr->hash, reward_log_itr->synchronizer, reward_log_itr->miner, reward_log_itr->parser,
+                        reward_log_itr->synchronizer_rewards, reward_log_itr->staking_rewards, reward_log_itr->consensus_rewards);
 
         reward_balance.synchronizer_rewards_unclaimed.amount = 0;
     }
@@ -257,8 +269,7 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
     });
 }
 
-void reward_distribution::token_transfer(const name& from, const name& to, const extended_asset& value,
-                                         const string& memo) {
+void reward_distribution::token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo) {
     exsat::transfer_action transfer(value.contract, {from, "active"_n});
     transfer.send(from, to, value.quantity, memo);
 }

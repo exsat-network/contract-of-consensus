@@ -145,7 +145,6 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
     };
     typedef eosio::singleton<"rewardbal"_n, reward_balance_row> reward_balance_table;
 
-
     struct reward_rate_t {
         uint64_t miner_reward_rate = 0;
         uint64_t synchronizer_reward_rate = 0;
@@ -172,18 +171,6 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
     };
     typedef eosio::singleton<"rewardconfig"_n, reward_config_row> reward_config_table;
 
-    // consensus_config_row from ENDORSER_MANAGE_CONTRACT contract
-    struct consensus_config_row { 
-        uint16_t version = 1; 
-        asset xsat_base_stake;
-        asset btc_base_stake;
-        uint32_t flags = 0; 
-        enum _ { xsat_consensus_mask = 0x00000001 }; 
-        uint8_t validator_active_vote_count = 0; 
-        uint8_t synchronizer_revote_confirm_count = 2; 
-    };
-    typedef eosio::singleton<"consconfig"_n, consensus_config_row> consensus_config_table;
-
     /**
      * ## ACTION `distribute`
      *
@@ -203,16 +190,6 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
      */
     [[eosio::action]]
     void distribute(const uint64_t height);
-
-    // ChainStateRow = utxo_manage::chain_state_row
-    template <typename ChainStateRow>
-    void distribute_per_symbol(const ChainStateRow &chain_state,
-        const uint64_t height, bool is_btc, 
-        int64_t synchronizer_rewards,
-        int64_t staking_rewards,
-        int64_t consensus_rewards, 
-        reward_log_table &_reward_log, 
-        reward_balance_table &_reward_balance);
 
     /**
      * ## ACTION `endtreward`
@@ -235,19 +212,29 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
      */
     [[eosio::action]]
     void endtreward(const uint64_t height, const uint32_t from_index, const uint32_t to_index);
-
+    
     [[eosio::action]]
     void endtreward2(const uint64_t height, const uint32_t from_index, const uint32_t to_index);
+    
+    [[eosio::action]]
+    void setrwdconfig(reward_config_row config);
 
     void endtreward_per_symbol(const uint64_t height, uint32_t from_index, const uint32_t to_index, 
         bool is_btc_validators, reward_log_table &_reward_log, reward_balance_table &_reward_balance);
 
+    // ChainStateRow = utxo_manage::chain_state_row
+    template <typename ChainStateRow>
+    void distribute_per_symbol(const ChainStateRow &chain_state,
+        const uint64_t height, bool is_btc, 
+        int64_t synchronizer_rewards,
+        int64_t staking_rewards,
+        int64_t consensus_rewards, 
+        reward_log_table &_reward_log, 
+        reward_balance_table &_reward_balance);
+
 #ifdef DEBUG
     [[eosio::action]]
     void cleartable(const name table_name, const optional<name> scope, const optional<uint64_t> max_rows);
-
-    [[eosio::action]]
-    void setstate(uint64_t height, name miner, name synchronizer, std::vector<name> provider_validators, uint64_t staking);
 #endif
 
     // logs
@@ -264,9 +251,6 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
         require_auth(get_self());
     }
 
-    [[eosio::action]]
-    void setrwdconfig(reward_config_row config);
-
     using distribute_action = eosio::action_wrapper<"distribute"_n, &reward_distribution::distribute>;
     using endtreward_action = eosio::action_wrapper<"endtreward"_n, &reward_distribution::endtreward>;
     using rewardlog_action = eosio::action_wrapper<"rewardlog"_n, &reward_distribution::rewardlog>;
@@ -282,8 +266,7 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
 
     void token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo);
 
-    reward_rate_t get_reward_rate();
-
+    reward_rate_t get_reward_rate(int version);
 #ifdef DEBUG
     template <typename T>
     void clear_table(T& table, uint64_t rows_to_clear);

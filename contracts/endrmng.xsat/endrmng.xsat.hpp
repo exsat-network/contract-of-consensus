@@ -18,6 +18,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     // CONSTANTS
     const std::set<name> WHITELIST_TYPES = {"proxyreg"_n, "evmcaller"_n};
 
+    // 0: BTC, 1: XSAT
+    const std::set<uint32_t> VALIDATOR_ROLE = {0, 1};
+    
     /**
      * ## TABLE `globalid`
      *
@@ -366,6 +369,19 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         uint64_t by_qualification() const { return qualification.amount; }
         uint64_t by_disabled_staking() const { return disabled_staking; }
         uint64_t by_total_donated() const { return total_donated.amount; }
+
+        
+        // v2
+        binary_extension<checksum160> stake_address;
+        binary_extension<checksum160> reward_address;
+        binary_extension<uint64_t> consecutive_vote_count;
+        binary_extension<uint64_t> latest_consensus_block;
+
+        // 0: inactive, 1: active, 2: credit staking validator
+        binary_extension<uint8_t> active_flag;
+
+        // 0: BTC, 1: XSAT
+        binary_extension<uint32_t> role;
     };
     typedef eosio::multi_index<
         "validators"_n, validator_row,
@@ -403,6 +419,35 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         asset xsat_total_donated = {0, XSAT_SYMBOL};
     };
     typedef eosio::singleton<"stat"_n, stat_row> stat_table;
+
+    /**
+     * ## TABLE `consensus_config`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint16_t} version` - consensus version
+     * - `{asset} xsat_base_stake` - xsat base stake 2100 XSAT
+     * - `{asset} btc_base_stake` - btc base stake 100 BTC
+     * - `{bool} xsat_consensus` - whether to enable xsat consensus
+     * - `{uint8_t} validator_active_vote_count` - validator become active vote count
+     * - `{uint8_t} synchronizer_revote_confirm_count` - synchronizer revote confirm count
+     */
+    struct [[eosio::table]] consensus_config_row {
+        uint16_t version = 1;
+
+        asset xsat_base_stake = {210000000000, XSAT_SYMBOL};
+
+        asset btc_base_stake = {10000000000, BTC_SYMBOL};
+
+        uint32_t flags = 0;
+        enum _ { xsat_consensus_mask = 0x00000001 };
+
+        uint8_t validator_active_vote_count = 0;
+
+        uint8_t synchronizer_revote_confirm_count = 2;
+    };
+    typedef eosio::singleton<"consconfig"_n, consensus_config_row> consensus_config_table;
 
     /**
      * ## ACTION `setdonateacc`
@@ -1110,7 +1155,39 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 #ifdef DEBUG
     [[eosio::action]]
     void cleartable(const name table_name, const optional<name> scope, const optional<uint64_t> max_rows);
+
+    [[eosio::action]]
+    void resconsconf() {
+        require_auth(get_self());
+        _consensus_config.remove();
+    }
 #endif
+
+    // v2
+    [[eosio::action]]
+    void newregvldtor(const name& validator, const uint32_t role, const checksum160& stake_addr,
+                      const optional<checksum160>& reward_addr, const optional<uint16_t>& commission_rate);
+
+    [[eosio::action]]
+    void evmconfigvald(const name& validator, const optional<uint16_t>& commission_rate, const optional<uint16_t>& donate_rate);
+
+    [[eosio::action]]
+    void evmsetstaker(const name& validator, const checksum160& stake_addr);
+
+    [[eosio::action]]
+    void updatexsat(const bool is_open);
+
+    [[eosio::action]]
+    void setstakebase(const asset& xsat_base_stake, const asset& btc_base_stake);
+
+    [[eosio::action]]
+    void setconsebase(const uint8_t validator_active_vote_count, const uint8_t synchronizer_revote_confirm_count);
+
+    [[eosio::action]]
+    void upgradev2();
+
+    [[eosio::action]]
+    void endorse(const name& validator, const uint64_t height);
 
     // logs
     [[eosio::action]]
@@ -1223,6 +1300,12 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
                       const asset& new_validator_staking) {
         require_auth(get_self());
     }
+    
+    [[eosio::action]]
+    void regvldtorlog(const name& validator, const uint32_t role, const checksum160& stake_addr,
+                      const optional<checksum160>& reward_addr, const optional<uint16_t>& commission_rate) {
+        require_auth(get_self());
+    }
 
     using stake_action = eosio::action_wrapper<"stake"_n, &endorse_manage::stake>;
     using unstake_action = eosio::action_wrapper<"unstake"_n, &endorse_manage::unstake>;
@@ -1258,6 +1341,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     using estkxsatlog_action = eosio::action_wrapper<"estkxsatlog"_n, &endorse_manage::estkxsatlog>;
     using eustkxsatlog_action = eosio::action_wrapper<"eustkxsatlog"_n, &endorse_manage::eustkxsatlog>;
     using erstkxsatlog_action = eosio::action_wrapper<"erstkxsatlog"_n, &endorse_manage::erstkxsatlog>;
+    
+    using regvldtorlog_action = eosio::action_wrapper<"regvldtorlog"_n, &endorse_manage::regvldtorlog>;
+    using endorse_action = eosio::action_wrapper<"endorse"_n, &endorse_manage::endorse>;
 
     static checksum256 compute_staking_id(const checksum160& proxy, const checksum160& staker, const name& validator) {
         vector<char> result;
@@ -1281,6 +1367,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     credit_proxy_table _credit_proxy = credit_proxy_table(_self, _self.value);
     stat_table _stat = stat_table(_self, _self.value);
     config_table _config = config_table(_self, _self.value);
+    consensus_config_table _consensus_config = consensus_config_table(_self, _self.value);
 
     uint64_t next_staking_id();
 
@@ -1312,7 +1399,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     template <typename T, typename C>
     void staking_change(validator_table::const_iterator& validator_itr, T& _stake, C& stake_itr, const asset& quantity,
-                        const asset& qualification);
+                        const asset& qualification, const optional<uint8_t>& active_flag);
 
     template <typename T, typename C>
     void update_staking_reward(const uint128_t stake_acc_per_share, const uint128_t consensus_acc_per_share,
