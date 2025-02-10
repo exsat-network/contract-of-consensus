@@ -253,6 +253,7 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
 
     using distribute_action = eosio::action_wrapper<"distribute"_n, &reward_distribution::distribute>;
     using endtreward_action = eosio::action_wrapper<"endtreward"_n, &reward_distribution::endtreward>;
+    using endtreward2_action = eosio::action_wrapper<"endtreward2"_n, &reward_distribution::endtreward2>;
     using rewardlog_action = eosio::action_wrapper<"rewardlog"_n, &reward_distribution::rewardlog>;
     using endtrwdlog_action = eosio::action_wrapper<"endtrwdlog"_n, &reward_distribution::endtrwdlog>;
 

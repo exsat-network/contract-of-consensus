@@ -167,7 +167,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     }
 
     if (reached_consensus) {
-        
+
         // Need check other consensus
         if (consensus_config.version == 2) {
 

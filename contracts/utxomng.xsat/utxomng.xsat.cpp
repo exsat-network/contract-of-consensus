@@ -385,6 +385,16 @@ utxo_manage::process_block_result utxo_manage::processblock(const name& synchron
         reward_distribution::endtreward_action _endtreward(REWARD_DISTRIBUTION_CONTRACT, {get_self(), "active"_n});
         _endtreward.send(chain_state.migrating_height, from_index, to_index);
 
+        // check xsat consensus reward
+        endorse_manage::consensus_config_table _consensus_config
+        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+        auto consensus_config = _consensus_config.get_or_default();
+        if (consensus_config.version == 2 && consensus_config.flags & consensus_config.xsat_consensus_mask) {
+            // check xsat validators size
+            reward_distribution::endtreward2_action _endtreward2(REWARD_DISTRIBUTION_CONTRACT, {get_self(), "active"_n});
+            _endtreward2.send(chain_state.migrating_height, from_index, to_index);
+        }
+
         if (chain_state.num_provider_validators == chain_state.num_validators_assigned) {
             chain_state.irreversible_height = chain_state.migrating_height;
             chain_state.irreversible_hash = chain_state.migrating_hash;
@@ -652,7 +662,22 @@ void utxo_manage::find_set_next_irreversible_block(utxo_manage::chain_state_row&
     block_endorse::endorsement_table _endorsement(BLOCK_ENDORSE_CONTRACT, chain_state.migrating_height);
     auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
     auto endorsement_itr = endorsement_idx.require_find(chain_state.migrating_hash);
-    chain_state.num_provider_validators = endorsement_itr->provider_validators.size();
+
+    endorse_manage::consensus_config_table _consensus_config
+        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+    auto consensus_config = _consensus_config.get_or_default();
+    if (consensus_config.version == 2) {
+        // check xsat validators size
+        // XSAT endorsement: scope = migrating height | 0x100000000
+        constexpr uint64_t XSAT_SCOPE_MASK = 0x100000000;   
+        block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, chain_state.migrating_height | XSAT_SCOPE_MASK);
+        auto endorsement_idx_xsat = endorsement_xsat.get_index<"byhash"_n>();
+        auto itr_xsat = endorsement_idx_xsat.require_find(chain_state.migrating_hash);
+        chain_state.num_provider_validators = std::max(endorsement_itr->provider_validators.size(), 
+                                                     itr_xsat->provider_validators.size());
+    } else {
+        chain_state.num_provider_validators = endorsement_itr->provider_validators.size();
+    }
 
     auto consensus_block_itr = _consensus_block.find(consensus_block.bucket_id);
     _consensus_block.modify(consensus_block_itr, same_payer, [&](auto& row) {

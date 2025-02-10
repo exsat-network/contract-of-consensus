@@ -45,13 +45,16 @@ void reward_distribution::distribute(const uint64_t height) {
 
     endorse_manage::consensus_config_row consensus_config = _get_consensus_config();
     reward_rate_t reward_rate = get_reward_rate(consensus_config.version);
-    bool enable_exsat_consensus_reward = (consensus_config.flags & consensus_config.xsat_consensus_mask);
+    bool enable_exsat_consensus_reward = consensus_config.version == 2 && (consensus_config.flags & consensus_config.xsat_consensus_mask);
 
     check(_btc_reward_log.find(height) == _btc_reward_log.end(),
           "rwddist.xsat::distribute: the current block has been allocated rewards");
 
-    check(_xsat_reward_log.find(height) == _xsat_reward_log.end(),
-          "rwddist.xsat::distribute: the current block has been allocated rewards(2)");
+    // check xsat consensus reward
+    if (enable_exsat_consensus_reward) {
+        check(_xsat_reward_log.find(height) == _xsat_reward_log.end(),
+              "rwddist.xsat::distribute: the current block has been allocated rewards(2)");
+    }
 
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
@@ -164,13 +167,6 @@ void reward_distribution::distribute_per_symbol(const ChainStateRow& chain_state
 void reward_distribution::endtreward(const uint64_t height, uint32_t from_index, const uint32_t to_index) {
     require_auth(UTXO_MANAGE_CONTRACT);
     endtreward_per_symbol(height, from_index, to_index, true, _btc_reward_log, _btc_reward_balance);
-
-    // XSAT consensus reward
-    // TODO:  
-    auto itr = _xsat_reward_log.find(height);
-    if (itr != _xsat_reward_log.end()) {
-        endtreward_per_symbol(height, from_index, to_index, false, _xsat_reward_log, _xsat_reward_balance);
-    }
 }
 
 [[eosio::action]]
@@ -184,13 +180,27 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
                                                 reward_balance_table& _reward_balance) {
     auto reward_log_itr = _reward_log.require_find(height, "rwddist.xsat::endtreward: no rewards are being distributed");
 
-    check(reward_log_itr->num_validators_assigned < reward_log_itr->provider_validators.size(),
-          "rwddist.xsat::endtreward: the current block has distributed rewards");
-    check(from_index == reward_log_itr->num_validators_assigned, "rwddist.xsat::endtreward: invalid from_index");
-    check(to_index > from_index && to_index <= reward_log_itr->provider_validators.size(),
-          "rwddist.xsat::endtreward: invalid to_index");
+    // check(reward_log_itr->num_validators_assigned < reward_log_itr->provider_validators.size(),
+    //       "rwddist.xsat::endtreward: the current block has distributed rewards");
+    // check(from_index == reward_log_itr->num_validators_assigned, "rwddist.xsat::endtreward: invalid from_index");
+    // check(to_index > from_index && to_index <= reward_log_itr->provider_validators.size(),
+    //       "rwddist.xsat::endtreward: invalid to_index");
+
+    // FIXME: num_validators_assigned 
+    if (reward_log_itr->num_validators_assigned > reward_log_itr->provider_validators.size()) {
+        return;
+    }
+
+    if (from_index != reward_log_itr->num_validators_assigned) {
+        return;
+    }
+
+    if (to_index < from_index || to_index > reward_log_itr->provider_validators.size()) {
+        return;
+    }
 
     auto num_reached_consensus = xsat::utils::num_reached_consensus(reward_log_itr->num_validators);
+
 
     vector<endorse_manage::reward_details_row> reward_details;
     reward_details.reserve(to_index - from_index);
