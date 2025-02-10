@@ -45,7 +45,7 @@ void reward_distribution::distribute(const uint64_t height) {
 
     endorse_manage::consensus_config_row consensus_config = _get_consensus_config();
     reward_rate_t reward_rate = get_reward_rate(consensus_config.version);
-    bool enable_exsat_consensus_reward = consensus_config.version == 2 && (consensus_config.flags & consensus_config.xsat_consensus_mask);
+    bool enable_exsat_consensus_reward = consensus_config.version == 2;
 
     check(_btc_reward_log.find(height) == _btc_reward_log.end(),
           "rwddist.xsat::distribute: the current block has been allocated rewards");

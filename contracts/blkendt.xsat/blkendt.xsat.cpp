@@ -167,24 +167,25 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     }
 
     if (reached_consensus) {
-
-        // Need check other consensus
-        if (consensus_config.version == 2) {
-
-            // Get the number of other consensus and check
-            block_endorse::endorsement_table _other_endorsement(get_self(), _endorse_scope);
-            auto other_endorsement_idx = _other_endorsement.get_index<"byhash"_n>();
+        // For consensus version 2 with XSAT consensus enabled, verify that the XSAT endorsement result
+        // is consistent with the BTC endorsement result.
+        if (consensus_config.version == 2 && (consensus_config.flags & consensus_config_row::xsat_consensus_mask)) {
+            // Retrieve the endorsement record from the XSAT consensus scope.
+            block_endorse::endorsement_table other_endorsement(get_self(), _endorse_scope);
+            auto other_endorsement_idx = other_endorsement.get_index<"byhash"_n>();
             auto other_endorsement_itr = other_endorsement_idx.find(hash);
 
-            // xsat consensus & btc consensus need same and
-            if (other_endorsement_itr == other_endorsement_idx.end() || other_endorsement_itr->num_reached_consensus() > endorsement_itr->provider_validators.size()) {
-
+            // If the XSAT endorsement record does not exist, or its number of reached consensus validators
+            // exceeds the number of provider validators from the BTC endorsement, then do not proceed.
+            if (other_endorsement_itr == other_endorsement_idx.end() ||
+                other_endorsement_itr->num_reached_consensus() > endorsement_itr->provider_validators.size()) {
                 return;
             }
         }
 
-        utxo_manage::consensus_action _consensus(UTXO_MANAGE_CONTRACT, {get_self(), "active"_n});
-        _consensus.send(height, hash);
+        // If consensus conditions are met, trigger the consensus action.
+        utxo_manage::consensus_action consensus(UTXO_MANAGE_CONTRACT, {get_self(), "active"_n});
+        consensus.send(height, hash);
     }
     
     // send endrmng.xsat::endorse

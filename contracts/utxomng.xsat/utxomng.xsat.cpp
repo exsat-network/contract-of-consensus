@@ -296,7 +296,11 @@ bool utxo_manage::is_endorsement_consensus_reached(const uint64_t height, const 
     endorse_manage::consensus_config_table _consensus_config
         = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
     auto consensus_config = _consensus_config.get_or_default();
-    if (consensus_config.version == 1) {
+
+    // If the consensus configuration indicates an old consensus mechanism (version == 1)
+    // or the xsat consensus flag is disabled (flag == 0),
+    // then no new consensus process is initiated and we simply return the BTC consensus result.
+    if (consensus_config.version == 1 || consensus_config.flag == 0) {
         return btc_consensus;
     }
 
@@ -389,7 +393,7 @@ utxo_manage::process_block_result utxo_manage::processblock(const name& synchron
         endorse_manage::consensus_config_table _consensus_config
         = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
         auto consensus_config = _consensus_config.get_or_default();
-        if (consensus_config.version == 2 && consensus_config.flags & consensus_config.xsat_consensus_mask) {
+        if (consensus_config.version == 2) {
             // check xsat validators size
             reward_distribution::endtreward2_action _endtreward2(REWARD_DISTRIBUTION_CONTRACT, {get_self(), "active"_n});
             _endtreward2.send(chain_state.migrating_height, from_index, to_index);
