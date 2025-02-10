@@ -1180,6 +1180,10 @@ void endorse_manage::newregvldtor(const name& validator, const uint32_t role, co
 
     require_auth(validator);
 
+    string validator_str = validator.to_string();
+    check(validator_str.length() >= 4 && validator_str.substr(validator_str.length() - 4) == ".sat", 
+          "endrmng.xsat::newregvalidator: validator name must end with .sat");
+
     check(commission_rate <= RATE_BASE_10000,
           "endrmng.xsat::newregvalidator: commission_rate must be less than or equal to " + std::to_string(RATE_BASE_10000));
 
