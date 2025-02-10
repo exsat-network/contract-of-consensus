@@ -169,7 +169,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     if (reached_consensus) {
         // For consensus version 2 with XSAT consensus enabled, verify that the XSAT endorsement result
         // is consistent with the BTC endorsement result.
-        if (consensus_config.version == 2 && (consensus_config.flags & consensus_config_row::xsat_consensus_mask)) {
+        if (consensus_config.version == 2 && (consensus_config.flags & consensus_config.xsat_consensus_mask)) {
             // Retrieve the endorsement record from the XSAT consensus scope.
             block_endorse::endorsement_table other_endorsement(get_self(), _endorse_scope);
             auto other_endorsement_idx = other_endorsement.get_index<"byhash"_n>();
