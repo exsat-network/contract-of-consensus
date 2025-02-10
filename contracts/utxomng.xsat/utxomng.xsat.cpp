@@ -298,9 +298,9 @@ bool utxo_manage::is_endorsement_consensus_reached(const uint64_t height, const 
     auto consensus_config = _consensus_config.get_or_default();
 
     // If the consensus configuration indicates an old consensus mechanism (version == 1)
-    // or the xsat consensus flag is disabled (flag == 0),
+    // or the xsat consensus flag is disabled (flags == 0),
     // then no new consensus process is initiated and we simply return the BTC consensus result.
-    if (consensus_config.version == 1 || consensus_config.flag == 0) {
+    if (consensus_config.version == 1 || consensus_config.flags == 0) {
         return btc_consensus;
     }
 
