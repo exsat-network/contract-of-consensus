@@ -99,7 +99,7 @@ static constexpr uint64_t DEFAULT_PRODUCTED_BLOCK_LIMIT = 432;
 static constexpr uint64_t DEFAULT_NUM_SLOTS = 2;
 static constexpr uint16_t MAX_NUM_SLOTS = 1000;
 
-static constexpr uint8_t STAKE_RELEASE_CYCLE = 28;  // days
+static constexpr uint8_t STAKE_RELEASE_CYCLE = 7;  // days
 
 static constexpr uint16_t RATE_BASE_10000 = 10000;
 
