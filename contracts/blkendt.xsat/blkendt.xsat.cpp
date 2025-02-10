@@ -167,10 +167,9 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     }
 
     if (reached_consensus) {
-
-        bool enable_exsat_consensus_reward = (consensus_config.flags & consensus_config.xsat_consensus_mask);
+        
         // Need check other consensus
-        if (enable_exsat_consensus_reward) {
+        if (consensus_config.version == 2) {
 
             // Get the number of other consensus and check
             block_endorse::endorsement_table _other_endorsement(get_self(), _endorse_scope);
@@ -183,6 +182,9 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
                 return;
             }
         }
+
+        utxo_manage::consensus_action _consensus(UTXO_MANAGE_CONTRACT, {get_self(), "active"_n});
+        _consensus.send(height, hash);
     }
     
     // send endrmng.xsat::endorse

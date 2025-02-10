@@ -1186,9 +1186,6 @@ void endorse_manage::newregvldtor(const name& validator, const uint32_t role, co
     // Check Role
     check(VALIDATOR_ROLE.find(role) != VALIDATOR_ROLE.end(), "endrmng.xsat::newregvalidator: role does not exists");
 
-    check(commission_rate <= RATE_BASE_10000,
-          "endrmng.xsat::regvalidator: commission_rate must be less than or equal to " + std::to_string(RATE_BASE_10000));
-
     auto validator_itr = _validator.find(validator.value);
     check(validator_itr == _validator.end(), "endrmng.xsat::regvalidator: [validators] already exists");
 
@@ -1243,6 +1240,16 @@ void endorse_manage::evmconfigvald(const name& validator, const optional<uint16_
     require_auth(validator);
 
     check(commission_rate.has_value() || donate_rate.has_value(), "endrmng.xsat::evmconfigvald: commission_rate or donate_rate is required");
+    if (commission_rate.has_value()) {
+        check(commission_rate.value() <= RATE_BASE_10000,
+              "endrmng.xsat::evmconfigvald: commission_rate must be less than or equal to " + std::to_string(RATE_BASE_10000));
+    }
+
+    if (donate_rate.has_value()) {
+        check(donate_rate.value() <= RATE_BASE_10000,
+              "endrmng.xsat::evmconfigvald: donate_rate must be less than or equal to " + std::to_string(RATE_BASE_10000));
+    }
+
     auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::evmconfigvald: [validators] does not exists");
 
     _validator.modify(validator_itr, same_payer, [&](auto& row) {
@@ -1297,9 +1304,8 @@ void endorse_manage::setstakebase(const asset& xsat_base_stake, const asset& btc
     check(xsat_base_stake.symbol == XSAT_SYMBOL, "endrmng.xsat::setstakebase: xsat_base_stake must be XSAT");
     check(btc_base_stake.symbol == BTC_SYMBOL, "endrmng.xsat::setstakebase: btc_base_stake must be BTC");
 
-    check(xsat_base_stake.amount > 0 && xsat_base_stake.amount <= XSAT_SUPPLY,
-          "endrmng.xsat::setstakebase: xsat_base_stake must be greater than 0");
-    check(btc_base_stake.amount > 0 && BTC_SUPPLY, "endrmng.xsat::setstakebase: btc_base_stake must be greater than 0");
+    check(xsat_base_stake.amount > 0 && xsat_base_stake.amount <= XSAT_SUPPLY, "endrmng.xsat::setstakebase: xsat_base_stake must be greater than 0");
+    check(btc_base_stake.amount > 0 && btc_base_stake.amount <= BTC_SUPPLY, "endrmng.xsat::setstakebase: btc_base_stake must be greater than 0");
 
     auto itr = _validator.begin();
     while (itr != _validator.end()) {

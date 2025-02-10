@@ -202,11 +202,8 @@ void utxo_manage::consensus(const uint64_t height, const checksum256& hash) {
         return;
     }
 
-    block_endorse::endorsement_table _endorsement(BLOCK_ENDORSE_CONTRACT, height);
-    auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
-    auto endorsement_itr = endorsement_idx.find(hash);
-
-    if (endorsement_itr == endorsement_idx.end() || !endorsement_itr->reached_consensus()) {
+    // Check whether consensus has been reached based on endorsement data.
+    if (!is_endorsement_consensus_reached(height, hash)) {
         return;
     }
 
@@ -279,6 +276,39 @@ void utxo_manage::consensus(const uint64_t height, const checksum256& hash) {
     // consensus
     block_sync::consensus_action block_sync_consensus(BLOCK_SYNC_CONTRACT, {get_self(), "active"_n});
     block_sync_consensus.send(height, passed_index_itr->synchronizer, passed_index_itr->bucket_id);
+}
+
+//---------------------------------------------------------------------
+// Helper function: Check if endorsement consensus is reached
+//---------------------------------------------------------------------
+// This function reads the endorsement data from two scopes:
+// 1. BTC endorsement table (scope = height)
+// 2. XSAT endorsement table (scope = height | 0x100000000)
+// It returns true if either endorsement table indicates consensus.
+bool utxo_manage::is_endorsement_consensus_reached(const uint64_t height, const checksum256& hash) {
+    // Check BTC endorsement (scope = height)
+    block_endorse::endorsement_table endorsement_btc(BLOCK_ENDORSE_CONTRACT, height);
+    auto endorsement_idx_btc = endorsement_btc.get_index<"byhash"_n>();
+    auto itr_btc = endorsement_idx_btc.find(hash);
+    bool btc_consensus = (itr_btc != endorsement_idx_btc.end() && itr_btc->reached_consensus());
+
+    // check consensus version
+    endorse_manage::consensus_config_table _consensus_config
+        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+    auto consensus_config = _consensus_config.get_or_default();
+    if (consensus_config.version == 1) {
+        return btc_consensus;
+    }
+
+    // Check XSAT endorsement (scope = height | 0x100000000)
+    constexpr uint64_t XSAT_SCOPE_MASK = 0x100000000;
+    block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, height | XSAT_SCOPE_MASK);
+    auto endorsement_idx_xsat = endorsement_xsat.get_index<"byhash"_n>();
+    auto itr_xsat = endorsement_idx_xsat.find(hash);
+    bool xsat_consensus = (itr_xsat != endorsement_idx_xsat.end() && itr_xsat->reached_consensus());
+
+    // Return true if both BTC and XSAT endorsements indicate consensus.
+    return btc_consensus && xsat_consensus;
 }
 
 //@auth
