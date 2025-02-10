@@ -1175,6 +1175,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     void evmsetstaker(const name& validator, const checksum160& stake_addr);
 
     [[eosio::action]]
+    void setrwdaddr(const name& validator, const checksum160& reward_addr);
+
+    [[eosio::action]]
     void updatexsat(const bool is_open);
 
     [[eosio::action]]

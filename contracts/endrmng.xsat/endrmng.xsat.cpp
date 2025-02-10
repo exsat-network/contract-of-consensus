@@ -1281,6 +1281,24 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
 }
 
 [[eosio::action]]
+void endorse_manage::setrwdaddr(const name& validator, const checksum160& reward_address) {
+    
+    require_auth(validator);
+
+    auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::setrwdaddr: [validators] does not exists");
+
+    // only BTC Validator can set reward address
+    check(validator_itr->role.value() == 0, "endrmng.xsat::setrwdaddr: only BTC Validator can set reward address");
+
+    _validator.modify(validator_itr, same_payer, [&](auto& row) { 
+        row.reward_address = reward_address; 
+        
+        row.reward_recipient = ERC20_CONTRACT;
+        row.memo = "0x" + xsat::utils::checksum160_to_string(reward_address);
+    });
+}
+
+[[eosio::action]]
 void endorse_manage::updatexsat(const bool is_open) {
     require_auth(get_self());
 
