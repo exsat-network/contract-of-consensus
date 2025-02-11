@@ -569,7 +569,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
     // check base stake
     auto consens_config = _consensus_config.get_or_default();
-    if (config.version == 2 && validator_itr->active_flag.value() == 0 ) {
+    if (consens_config.version == 2 && validator_itr->active_flag.value() == 0 ) {
 
         // need to check base stake
         if (validator_itr->stake_address.has_value()) {
