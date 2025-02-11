@@ -90,7 +90,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         _other_endorse_scope = height;
     }
 
-    block_endorse::endorsement_table _endorsement(get_self(), height);
+    block_endorse::endorsement_table _endorsement(get_self(), _endorse_scope);
     auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
     auto endorsement_itr = endorsement_idx.find(hash);
     bool reached_consensus = false;
@@ -171,14 +171,14 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         // is consistent with the BTC endorsement result.
         if (consensus_config.version == 2 && (consensus_config.flags & consensus_config.xsat_consensus_mask)) {
             // Retrieve the endorsement record from the XSAT consensus scope.
-            block_endorse::endorsement_table other_endorsement(get_self(), _endorse_scope);
+            block_endorse::endorsement_table other_endorsement(get_self(), _other_endorse_scope);
             auto other_endorsement_idx = other_endorsement.get_index<"byhash"_n>();
             auto other_endorsement_itr = other_endorsement_idx.find(hash);
 
             // If the XSAT endorsement record does not exist, or its number of reached consensus validators
             // exceeds the number of provider validators from the BTC endorsement, then do not proceed.
             if (other_endorsement_itr == other_endorsement_idx.end() ||
-                other_endorsement_itr->num_reached_consensus() > endorsement_itr->provider_validators.size()) {
+                other_endorsement_itr->num_reached_consensus() > other_endorsement_itr->provider_validators.size()) {
                 return;
             }
         }
@@ -197,7 +197,7 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
     endorse_manage::validator_table _validator
         = endorse_manage::validator_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
     auto idx = _validator.get_index<"byqualifictn"_n>();
-    auto itr = idx.lower_bound(MIN_BTC_STAKE_FOR_VALIDATOR);
+    auto itr = idx.lower_bound(min_btc_qualification);
     std::vector<requested_validator_info> result;
 
     // endrmng.xsat consensus config
@@ -210,17 +210,20 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
         // only btc validator
         if (itr->role.has_value() && itr->role.value() != 0) {
 
+            itr++;
             continue;
         }
 
         // check active
         if (itr->active_flag.has_value() && itr->active_flag.value() == 0) {
 
+            itr++;
             continue;
         }
 
         if (itr->consecutive_vote_count.has_value() && itr->consecutive_vote_count.value() < consensus_config.validator_active_vote_count) {
 
+            itr++;
             continue;
         }
 
@@ -248,21 +251,24 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
         // only xsat validator
         if (itr->role.has_value() && itr->role.value() != 1) {
 
+            itr++;
             continue;
         }
 
         // check active
         if (itr->active_flag.has_value() && itr->active_flag.value() == 0) {
 
+            itr++;
             continue;
         }
 
         if (itr->consecutive_vote_count.has_value() && itr->consecutive_vote_count.value() < consensus_config.validator_active_vote_count) {
 
+            itr++;
             continue;
         }
 
-        result.emplace_back(requested_validator_info{.account = itr->owner, .staking = static_cast<uint64_t>(itr->quantity.amount)});
+        result.emplace_back(requested_validator_info{.account = itr->owner, .staking = static_cast<uint64_t>(itr->xsat_quantity.amount)});
         itr++;
     }
     return result;
