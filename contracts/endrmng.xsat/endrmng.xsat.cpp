@@ -561,7 +561,6 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
     check(!validator_itr->disabled_staking,
           "endrmng.xsat::evmstake: the current validator's staking status is disabled");
 
-
     // v2
     if (validator_itr->role.has_value()) {
 
@@ -570,7 +569,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
     // check base stake
     auto consens_config = _consensus_config.get_or_default();
-    if (validator_itr->role.has_value() && validator_itr->active_flag.value() == 0 ) {
+    if (config.version == 2 && validator_itr->active_flag.value() == 0 ) {
 
         // need to check base stake
         if (validator_itr->stake_address.has_value()) {
@@ -587,13 +586,12 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
     auto active_flag = 0;
     if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == stake_itr->staker) {
 
-        auto config = _consensus_config.get_or_default();
         auto stake_quantity = quantity;
         if (stake_itr != evm_staker_idx.end()) {
 
             stake_quantity += stake_itr->quantity;
         }
-        if (stake_quantity >= config.btc_base_stake) {
+        if (stake_quantity >= consens_config.btc_base_stake) {
 
             active_flag = 1;
         } else {
@@ -1449,5 +1447,4 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         row.consecutive_vote_count = is_consecutive ? row.consecutive_vote_count.value_or(0ULL) + 1ULL : 1ULL;
         row.latest_consensus_block = height;
     });
-
 }
