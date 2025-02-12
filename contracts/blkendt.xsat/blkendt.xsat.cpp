@@ -100,6 +100,9 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
     auto consensus_config = _consensus_config.get_or_default();
 
+    auto err_msg = xsat_validator ? "1005:blkendt.xsat::endorse: the validator has less than "
+                                            + consensus_config.xsat_base_stake.to_string() + " staked"
+                                        : "1005:blkendt.xsat::endorse: the validator has less than "+consensus_config.btc_base_stake.to_string()+" staked";
     if (endorsement_itr == endorsement_idx.end()) {
         // Verify whether the endorsement time of the next height is reached
         if (config.consensus_interval_seconds > 0 && height - 1 > START_HEIGHT) {
@@ -130,9 +133,6 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
                                 [&](const requested_validator_info& a) {
                                     return a.account == validator;
                                 });
-        auto err_msg = xsat_validator ? "1005:blkendt.xsat::endorse: the validator has less than "
-                                               + config.min_xsat_qualification.to_string() + " staked"
-                                         : "1005:blkendt.xsat::endorse: the validator has less than 100 BTC staked";
         check(itr != requested_validators.end(), err_msg);
         provider_validator_info provider_info{
             .account = itr->account, .staking = itr->staking, .created_at = current_time_point()};
@@ -156,8 +156,8 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
                                 endorsement_itr->requested_validators.end(), [&](const requested_validator_info& a) {
                                     return a.account == validator;
                                 });
-        check(itr != endorsement_itr->requested_validators.end(),
-              "1007:blkendt.xsat::endorse: the validator has less than 100 BTC staked");
+
+        check(itr != endorsement_itr->requested_validators.end(), err_msg);
         endorsement_idx.modify(endorsement_itr, same_payer, [&](auto& row) {
             row.provider_validators.push_back(
                 {.account = itr->account, .staking = itr->staking, .created_at = current_time_point()});

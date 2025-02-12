@@ -890,21 +890,24 @@ void endorse_manage::evmrestkxsat(const name& caller, const checksum160& proxy, 
                        new_validator_staking);
 }
 
-asset endorse_manage::evm_stake_xsat_without_auth(const checksum160& proxy, const checksum160& staker,
-                                                  const name& validator, const asset& quantity) {
+asset endorse_manage::evm_stake_xsat_without_auth(const checksum160& proxy, const checksum160& staker, const name& validator,
+                                                  const asset& quantity) {
     check(quantity.amount > 0, "endrmng.xsat::evmstakexsat: quantity must be greater than 0");
     check(quantity.symbol == XSAT_SYMBOL, "endrmng.xsat::evmstakexsat: quantity symbol must be XSAT");
-    check(quantity.amount <= XSAT_SUPPLY,
-          "endrmng.xsat::evmstakexsat: quantity must be less than [btc.xsat/BTC] max_supply");
+    check(quantity.amount <= XSAT_SUPPLY, "endrmng.xsat::evmstakexsat: quantity must be less than [btc.xsat/BTC] max_supply");
 
-    auto validator_itr
-        = _validator.require_find(validator.value, "endrmng.xsat::evmstakexsat: [validators] does not exists");
-    check(!validator_itr->disabled_staking,
-          "endrmng.xsat::evmstakexsat: the current validator's staking status is disabled");
+    auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::evmstakexsat: [validators] does not exists");
+    check(!validator_itr->disabled_staking, "endrmng.xsat::evmstakexsat: the current validator's staking status is disabled");
+    check(validator_itr->role.value() == 1, "endrmng.xsat::evmstakexsat: only XSAT validator can be staked");
+
+    // xsat stake address must be the same as validator's stake address
+    check(validator_itr->stake_address.value() == staker,
+            "endrmng.xsat::evmstake: only the validator's stake address can stake");
 
     auto evm_staker_idx = _evm_stake.get_index<"bystakingid"_n>();
     auto staker_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
 
+    auto stake_quantity = quantity;
     if (staker_itr == evm_staker_idx.end()) {
         auto staking_id = next_staking_id();
         _evm_stake.emplace(get_self(), [&](auto& row) {
@@ -921,14 +924,30 @@ asset endorse_manage::evm_stake_xsat_without_auth(const checksum160& proxy, cons
             row.consensus_reward_claimed = asset{0, XSAT_SYMBOL};
         });
     } else {
-        evm_staker_idx.modify(staker_itr, same_payer, [&](auto& row) {
-            row.xsat_quantity += quantity;
-        });
+
+        stake_quantity += staker_itr->xsat_quantity;
+        evm_staker_idx.modify(staker_itr, same_payer, [&](auto& row) { row.xsat_quantity += quantity; });
+    }
+
+    auto active_flag = validator_itr->active_flag.value();
+    // V2 check base stake amount
+    if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == staker) {
+
+        auto config = _consensus_config.get_or_default();
+        if (stake_quantity >= config.xsat_base_stake) {
+
+            active_flag = 1;
+        } else {
+
+            active_flag = 0;
+        }
     }
 
     _validator.modify(validator_itr, same_payer, [&](auto& row) {
         row.xsat_quantity += quantity;
         row.latest_staking_time = current_time_point();
+
+        row.active_flag = active_flag;
     });
 
     stat_row stat = _stat.get_or_default();
@@ -938,26 +957,42 @@ asset endorse_manage::evm_stake_xsat_without_auth(const checksum160& proxy, cons
     return validator_itr->xsat_quantity;
 }
 
-asset endorse_manage::evm_unstake_xsat_without_auth(const checksum160& proxy, const checksum160& staker,
-                                                    const name& validator, const asset& quantity) {
+asset endorse_manage::evm_unstake_xsat_without_auth(const checksum160& proxy, const checksum160& staker, const name& validator,
+                                                    const asset& quantity) {
     check(quantity.amount > 0, "endrmng.xsat::evmunstkxsat: quantity must be greater than 0");
     check(quantity.symbol == XSAT_SYMBOL, "endrmng.xsat::evmunstkxsat: quantity symbol must be XSAT");
 
     auto evm_staker_idx = _evm_stake.get_index<"bystakingid"_n>();
-    auto evm_staker_itr = evm_staker_idx.require_find(compute_staking_id(proxy, staker, validator),
-                                                      "endrmng.xsat::evmunstkxsat: [evmstakers] does not exists");
+    auto evm_staker_itr = evm_staker_idx.require_find(
+        compute_staking_id(proxy, staker, validator), "endrmng.xsat::evmunstkxsat: [evmstakers] does not exists");
     check(evm_staker_itr->xsat_quantity >= quantity, "endrmng.xsat::evmunstkxsat: insufficient stake");
 
-    auto validator_itr = _validator.require_find(evm_staker_itr->validator.value,
-                                                 "endrmng.xsat::evmunstkxsat: [validators] does not exists");
+    auto validator_itr
+        = _validator.require_find(evm_staker_itr->validator.value, "endrmng.xsat::evmunstkxsat: [validators] does not exists");
 
-    evm_staker_idx.modify(evm_staker_itr, same_payer, [&](auto& row) {
-        row.xsat_quantity -= quantity;
-    });
+    evm_staker_idx.modify(evm_staker_itr, same_payer, [&](auto& row) { row.xsat_quantity -= quantity; });
+
+    auto active_flag = validator_itr->active_flag.value();
+    auto stake_amount = evm_staker_itr->xsat_quantity;
+    // V2 check base stake amount
+    if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == staker) {
+
+        stake_amount -= quantity;
+        auto config = _consensus_config.get_or_default();
+        if (stake_amount >= config.xsat_base_stake) {
+
+            active_flag = 1;
+        } else {
+
+            active_flag = 0;
+        }
+    }
 
     _validator.modify(validator_itr, same_payer, [&](auto& row) {
         row.xsat_quantity -= quantity;
         row.latest_staking_time = current_time_point();
+
+        row.active_flag = active_flag;
     });
 
     stat_row stat = _stat.get_or_default();
