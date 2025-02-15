@@ -211,7 +211,7 @@ void utxo_manage::consensus(const uint64_t height, const checksum256& hash) {
     if (passed_index_itr->miner && passed_index_itr->synchronizer != passed_index_itr->miner) {
         block_sync::block_miner_table _block_miner(BLOCK_SYNC_CONTRACT, height);
         auto block_miner_idx = _block_miner.get_index<"byhash"_n>();
-        auto block_miner_itr = block_miner_idx.require_find(hash);
+        auto block_miner_itr = block_miner_idx.require_find(hash, "utxomng.xsat::consensus: block miner does not exist");
 
         if (block_miner_itr->expired_block_num > current_block_number()) {
             return;
@@ -270,7 +270,6 @@ void utxo_manage::consensus(const uint64_t height, const checksum256& hash) {
 
     // Set the block height of the latest migration
     find_set_next_irreversible_block(chain_state);
-
     _chain_state.set(chain_state, get_self());
 
     // consensus
@@ -293,19 +292,15 @@ bool utxo_manage::is_endorsement_consensus_reached(const uint64_t height, const 
     bool btc_consensus = (itr_btc != endorsement_idx_btc.end() && itr_btc->reached_consensus());
 
     // check consensus version
-    endorse_manage::consensus_config_table _consensus_config
-        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
-    auto consensus_config = _consensus_config.get_or_default();
+    block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto config = _config.get_or_default();
 
-    // If the consensus configuration indicates an old consensus mechanism (version == 1)
-    // or the xsat consensus flag is disabled (flags == 0),
-    // then no new consensus process is initiated and we simply return the BTC consensus result.
-    if (consensus_config.version == 1 || consensus_config.flags == 0) {
+    // XSAT consensus inactive
+    if (!config.is_xsat_consensus_active(height)) {
         return btc_consensus;
     }
 
     // Check XSAT endorsement (scope = height | 0x100000000)
-    constexpr uint64_t XSAT_SCOPE_MASK = 0x100000000;
     block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, height | XSAT_SCOPE_MASK);
     auto endorsement_idx_xsat = endorsement_xsat.get_index<"byhash"_n>();
     auto itr_xsat = endorsement_idx_xsat.find(hash);
@@ -389,11 +384,11 @@ utxo_manage::process_block_result utxo_manage::processblock(const name& synchron
         reward_distribution::endtreward_action _endtreward(REWARD_DISTRIBUTION_CONTRACT, {get_self(), "active"_n});
         _endtreward.send(chain_state.migrating_height, from_index, to_index);
 
-        // check xsat consensus reward
-        endorse_manage::consensus_config_table _consensus_config
-        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
-        auto consensus_config = _consensus_config.get_or_default();
-        if (consensus_config.version == 2) {
+        block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+        auto config = _config.get_or_default();
+
+        // XSAT reward actived 
+        if (config.is_xsat_reward_active(chain_state.migrating_height)) {
             // check xsat validators size
             reward_distribution::endtreward2_action _endtreward2(REWARD_DISTRIBUTION_CONTRACT, {get_self(), "active"_n});
             _endtreward2.send(chain_state.migrating_height, from_index, to_index);
@@ -667,13 +662,15 @@ void utxo_manage::find_set_next_irreversible_block(utxo_manage::chain_state_row&
     auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
     auto endorsement_itr = endorsement_idx.require_find(chain_state.migrating_hash);
 
-    endorse_manage::consensus_config_table _consensus_config
-        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
-    auto consensus_config = _consensus_config.get_or_default();
-    if (consensus_config.version == 2) {
+    block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto config = _config.get_or_default();
+
+    // XSAT reward actived
+    if (config.is_xsat_reward_active(chain_state.head_height)) {
+        // 
+        check(false, "utxomng.xsat::consensus: test-670");
         // check xsat validators size
         // XSAT endorsement: scope = migrating height | 0x100000000
-        constexpr uint64_t XSAT_SCOPE_MASK = 0x100000000;   
         block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, chain_state.migrating_height | XSAT_SCOPE_MASK);
         auto endorsement_idx_xsat = endorsement_xsat.get_index<"byhash"_n>();
         auto itr_xsat = endorsement_idx_xsat.require_find(chain_state.migrating_hash);

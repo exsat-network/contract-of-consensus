@@ -116,3 +116,6 @@ static constexpr fee_type PUSH_CHUNK = 2;
 static constexpr fee_type VERIFY = 3;
 static constexpr fee_type ENDORSE = 4;
 static constexpr fee_type PARSE = 5;
+
+// XSAT SCOPE MASK
+static constexpr uint64_t XSAT_SCOPE_MASK = 0x100000000;   

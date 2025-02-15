@@ -15,27 +15,18 @@ void reward_distribution::setrwdconfig(reward_config_row config) {
     _reward_config.set(config, get_self());
 }
 
-endorse_manage::consensus_config_row _get_consensus_config() {
-    // consensus config
-    endorse_manage::consensus_config_table _consensus_config
-        = endorse_manage::consensus_config_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
-    return _consensus_config.get_or_default();
-}
-
 reward_distribution::reward_rate_t reward_distribution::get_reward_rate(int version) {
     reward_config_table _reward_config(get_self(), get_self().value);
     reward_config_row reward_config{};
     if (_reward_config.exists()) {
         reward_config = _reward_config.get();
     }
-    reward_config.cached_version = version;
-    _reward_config.set(reward_config, get_self());
 
-    if (reward_config.cached_version <= 1)
-        return reward_config.v1;
-    else {
+    if (version == 2) {
         return reward_config.v2;
     }
+
+    return reward_config.v1;
 }
 
 //@auth utxomng.xsat
@@ -43,12 +34,17 @@ reward_distribution::reward_rate_t reward_distribution::get_reward_rate(int vers
 void reward_distribution::distribute(const uint64_t height) {
     require_auth(UTXO_MANAGE_CONTRACT);
 
-    endorse_manage::consensus_config_row consensus_config = _get_consensus_config();
-    reward_rate_t reward_rate = get_reward_rate(consensus_config.version);
-    bool enable_exsat_consensus_reward = consensus_config.version == 2;
-
     check(_btc_reward_log.find(height) == _btc_reward_log.end(),
           "rwddist.xsat::distribute: the current block has been allocated rewards");
+          
+    block_endorse::config_table _blkendt_config(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto config = _blkendt_config.get_or_default();
+    auto reward_version = 1;
+    bool enable_exsat_consensus_reward = config.is_xsat_reward_active(height);
+    if (enable_exsat_consensus_reward) {
+        reward_version = 2;
+    }
+    reward_rate_t reward_rate = get_reward_rate(reward_version);
 
     // check xsat consensus reward
     if (enable_exsat_consensus_reward) {
@@ -112,9 +108,8 @@ void reward_distribution::distribute_per_symbol(const ChainStateRow& chain_state
                                                 reward_log_table& _reward_log, reward_balance_table& _reward_balance) {
     auto hash = chain_state.migrating_hash;
 
-    // FIXME: height lookup
     block_endorse::endorsement_table _endorsement(
-        BLOCK_ENDORSE_CONTRACT, (is_btc ? height : height | 0x100000000)); // blkendt.xsat
+        BLOCK_ENDORSE_CONTRACT, (is_btc ? height : height | XSAT_SCOPE_MASK)); // blkendt.xsat
     auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
     auto endorsement_itr = endorsement_idx.find(hash);
 
