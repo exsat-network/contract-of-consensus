@@ -46,7 +46,9 @@ void block_endorse::config(const uint64_t limit_endorse_height, const uint16_t l
 //@auth get_self()
 [[eosio::action]] 
 void block_endorse::setqualify(const asset& min_xsat_qualification, const asset& min_btc_qualification) {
-    require_auth(ENDORSER_MANAGE_CONTRACT);
+    if (!has_auth(ENDORSER_MANAGE_CONTRACT)) {
+        require_auth(get_self());
+    }
 
     check(min_xsat_qualification.symbol == XSAT_SYMBOL,
           "blkendt.xsat::setqualify: min_xsat_qualification symbol must be XSAT");

@@ -65,7 +65,7 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
         }
 
         asset get_btc_base_stake() const {
-            return min_btc_qualification.has_value() ? min_btc_qualification.value() : asset(MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL);
+            return min_btc_qualification.has_value() && min_btc_qualification.value().amount > 0 ? min_btc_qualification.value() : asset(MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL);
         }
 
         uint8_t get_validator_active_vote_count() const {
