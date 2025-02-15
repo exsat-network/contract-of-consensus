@@ -1325,7 +1325,9 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
     }
 
     // Modify the validator's stake address
-    _validator.modify(validator_itr, same_payer, [&](auto& row) { row.stake_address = stake_addr; });
+    _validator.modify(validator_itr, get_self(), [&](auto& row) {
+        row.stake_address = stake_addr;  // Modify the stake address to the new one
+    });
 }
 
 
@@ -1339,7 +1341,7 @@ void endorse_manage::setrwdaddr(const name& validator, const checksum160& reward
     // only BTC Validator can set reward address
     check(validator_itr->role.value() == 0, "endrmng.xsat::setrwdaddr: only BTC Validator can set reward address");
 
-    _validator.modify(validator_itr, same_payer, [&](auto& row) { 
+    _validator.modify(validator_itr, get_self(), [&](auto& row) { 
         row.reward_address = reward_address; 
         
         row.reward_recipient = ERC20_CONTRACT;

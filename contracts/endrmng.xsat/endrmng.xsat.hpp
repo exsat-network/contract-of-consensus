@@ -388,6 +388,14 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         uint64_t get_role() const {
             return role.has_value() ? static_cast<uint64_t>(role.value()) : 0;
         }
+
+        checksum256 by_stake_address() const {
+            if (!stake_address.has_value()) {
+                return checksum256();
+            }
+            checksum160 addr = stake_address.value();
+            return xsat::utils::compute_id(addr);
+        }
     };
     typedef eosio::multi_index<
         "validators"_n, validator_row,
@@ -397,6 +405,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
                           const_mem_fun<validator_row, uint64_t, &validator_row::by_xsat_total_staking>>,
         eosio::indexed_by<"byqualifictn"_n, const_mem_fun<validator_row, uint64_t, &validator_row::by_qualification>>,
         eosio::indexed_by<"byrole"_n, const_mem_fun<validator_row, uint64_t, &validator_row::get_role>>,
+        eosio::indexed_by<"bystakeaddr"_n, const_mem_fun<validator_row, checksum256, &validator_row::by_stake_address>>,
         eosio::indexed_by<"bydonate"_n, const_mem_fun<validator_row, uint64_t, &validator_row::by_total_donated>>>
         validator_table;
 
@@ -426,35 +435,6 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         asset xsat_total_donated = {0, XSAT_SYMBOL};
     };
     typedef eosio::singleton<"stat"_n, stat_row> stat_table;
-
-    /**
-     * ## TABLE `consensus_config`
-     *
-     * ### scope `get_self()`
-     * ### params
-     *
-     * - `{uint16_t} version` - consensus version
-     * - `{asset} xsat_base_stake` - xsat base stake 2100 XSAT
-     * - `{asset} btc_base_stake` - btc base stake 100 BTC
-     * - `{bool} xsat_consensus` - whether to enable xsat consensus
-     * - `{uint8_t} validator_active_vote_count` - validator become active vote count
-     * - `{uint8_t} synchronizer_revote_confirm_count` - synchronizer revote confirm count
-     */
-    struct [[eosio::table]] consensus_config_row {
-        uint16_t version = 1;
-
-        asset xsat_base_stake = {210000000000, XSAT_SYMBOL};
-
-        asset btc_base_stake = {10000000000, BTC_SYMBOL};
-
-        uint32_t flags = 0;
-        enum _ { xsat_consensus_mask = 0x00000001 };
-
-        uint8_t validator_active_vote_count = 0;
-
-        uint8_t synchronizer_revote_confirm_count = 2;
-    };
-    typedef eosio::singleton<"consconfig"_n, consensus_config_row> consensus_config_table;
 
     /**
      * ## ACTION `setdonateacc`
@@ -1164,12 +1144,6 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     void cleartable(const name table_name, const optional<name> scope, const optional<uint64_t> max_rows);
 
     [[eosio::action]]
-    void resconsconf() {
-        require_auth(get_self());
-        _consensus_config.remove();
-    }
-
-    [[eosio::action]]
     void delvalidator(const name& validator) {
         require_auth(get_self());
         auto itr = _validator.find(validator.value);
@@ -1193,16 +1167,10 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     void setrwdaddr(const name& validator, const checksum160& reward_addr);
 
     [[eosio::action]]
-    void updatexsat(const bool is_open);
-
-    [[eosio::action]]
     void setstakebase(const asset& xsat_base_stake, const asset& btc_base_stake);
 
     [[eosio::action]]
-    void setconsebase(const uint8_t validator_active_vote_count, const uint8_t synchronizer_revote_confirm_count);
-
-    [[eosio::action]]
-    void upgradev2();
+    void updcreditstk(bool is_close);
 
     [[eosio::action]]
     void endorse(const name& validator, const uint64_t height);
@@ -1385,7 +1353,6 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     credit_proxy_table _credit_proxy = credit_proxy_table(_self, _self.value);
     stat_table _stat = stat_table(_self, _self.value);
     config_table _config = config_table(_self, _self.value);
-    consensus_config_table _consensus_config = consensus_config_table(_self, _self.value);
 
     uint64_t next_staking_id();
 
