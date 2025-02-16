@@ -239,8 +239,7 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
      */
     [[eosio::action]]
     void config(const uint64_t limit_endorse_height, const uint16_t limit_num_endorsed_blocks,
-                const uint16_t min_validators, const uint64_t xsat_stake_activation_height,
-                const uint16_t consensus_interval_seconds, const uint64_t xsat_reward_height, 
+                const uint16_t min_validators, const uint16_t consensus_interval_seconds, 
                 const uint8_t validator_active_vote_count);
 
     /**
@@ -314,12 +313,44 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
     /**
      * ## ACTION `setqualify`
      *
-     * - **authority**: `endrmng.xsat`
+     * - **authority**: `endrmng.xsat` or `get_self()`
      *
      * > Set the minimum pledge amount of xast to become a validator
+     *
+     * ### params
+     *
+     * - `{asset} min_xsat_qualification` - the minimum pledge amount of xast to become a validator
+     * - `{asset} min_btc_qualification` - the minimum pledge amount of btc to become a validator
+     *
+     * ### example
+     *
+     * ```bash
+     * $ cleos push action blkendt.xsat setqualify '["21000.00000000 XSAT", "100.00000000 BTC"]' -p endrmng.xsat
+     * ```
      */
     [[eosio::action]]
     void setqualify(const asset& min_xsat_qualification, const asset& min_btc_qualification);
+
+    /**
+     * ## ACTION `setconheight`
+     *
+     * - **authority**: `get_self()`
+     *
+     * > Set the XSAT stake activation height and XSAT reward height
+     *
+     * ### params
+     *
+     * - `{uint64_t} xsat_stake_activation_height` - block height at which XSAT staking feature is activated
+     * - `{uint64_t} xsat_reward_height` - block height at which XSAT reward feature is activated
+     *
+     * ### example
+     *
+     * ```bash
+     * $ cleos push action blkendt.xsat setconheight '[860000, 870000]' -p blkendt.xsat
+     * ```
+     */
+    [[eosio::action]]
+    void setconheight(const uint64_t xsat_stake_activation_height, const uint64_t xsat_reward_height);
 
     using erase_action = eosio::action_wrapper<"erase"_n, &block_endorse::erase>;
     using setqualify_action = eosio::action_wrapper<"setqualify"_n, &block_endorse::setqualify>;

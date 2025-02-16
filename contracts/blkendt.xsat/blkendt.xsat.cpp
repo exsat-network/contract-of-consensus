@@ -24,22 +24,20 @@ void block_endorse::erase(const uint64_t height) {
 //@auth get_self()
 [[eosio::action]]
 void block_endorse::config(const uint64_t limit_endorse_height, const uint16_t limit_num_endorsed_blocks,
-                           const uint16_t min_validators, const uint64_t xsat_stake_activation_height,
-                           const uint16_t consensus_interval_seconds, const uint64_t xsat_reward_height, 
+                           const uint16_t min_validators, const uint16_t consensus_interval_seconds, 
                            const uint8_t validator_active_vote_count) {
     require_auth(get_self());
     check(min_validators > 0, "blkendt.xsat::config: min_validators must be greater than 0");
-    check(xsat_reward_height > START_HEIGHT, "blkendt.xsat::config: xsat_reward_height must be greater than START_HEIGHT");
 
     auto config = _config.get_or_default();
     config.limit_endorse_height = limit_endorse_height;
-    config.xsat_stake_activation_height = xsat_stake_activation_height;
+    // config.xsat_stake_activation_height = xsat_stake_activation_height;
     config.limit_num_endorsed_blocks = limit_num_endorsed_blocks;
     config.min_validators = min_validators;
     config.consensus_interval_seconds = consensus_interval_seconds;
     // config.min_xsat_qualification = min_xsat_qualification;
     // config.min_btc_qualification = min_btc_qualification;
-    config.xsat_reward_height = xsat_reward_height;
+    // config.xsat_reward_height = xsat_reward_height;
     config.validator_active_vote_count = validator_active_vote_count;
     _config.set(config, get_self());
 }
@@ -65,6 +63,19 @@ void block_endorse::setqualify(const asset& min_xsat_qualification, const asset&
     _config.set(config, get_self());
 }
 
+//@auth get_self()
+[[eosio::action]]
+void block_endorse::setconheight(const uint64_t xsat_stake_activation_height, const uint64_t xsat_reward_height) {
+    require_auth(get_self());
+
+    check(xsat_stake_activation_height > START_HEIGHT, "blkendt.xsat::setconheight: xsat_stake_activation_height must be greater than START_HEIGHT");
+    check(xsat_reward_height > START_HEIGHT, "blkendt.xsat::setconheight: xsat_reward_height must be greater than START_HEIGHT");
+
+    auto config = _config.get_or_default();
+    config.xsat_stake_activation_height = xsat_stake_activation_height;
+    config.xsat_reward_height = xsat_reward_height;
+    _config.set(config, get_self());
+}
 
 //@auth validator
 [[eosio::action]]
