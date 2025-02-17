@@ -1365,6 +1365,11 @@ void endorse_manage::setstakebase(const asset& xsat_base_stake, const asset& btc
 
     auto itr = _validator.begin();
     while (itr != _validator.end()) {
+        if (!itr->role.has_value()) {
+            itr++;
+            continue;
+        }
+        
         auto active = itr->active_flag;
         if (itr->role.value() == 0) {
             if (itr->qualification >= btc_base_stake) {
@@ -1406,6 +1411,10 @@ void endorse_manage::updcreditstk(bool is_close) {
 
     auto validator_itr = _validator.begin();
     while (validator_itr != _validator.end()) {
+        if (validator_itr->role.has_value() && validator_itr->role.value() == 1) {  
+            validator_itr++;
+            continue;
+        }
 
         auto active = 0;
         auto quantity = validator_itr->qualification;
@@ -1438,7 +1447,6 @@ void endorse_manage::updcreditstk(bool is_close) {
                 active = 1;
             }
         }
-
 
         _validator.modify(validator_itr, get_self(), [&](auto& row) {
             // Default validator role is 0 (BTC)
