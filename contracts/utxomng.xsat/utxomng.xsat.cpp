@@ -673,12 +673,17 @@ void utxo_manage::find_set_next_irreversible_block(utxo_manage::chain_state_row&
         // XSAT endorsement: scope = migrating height | 0x100000000
         block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, chain_state.migrating_height | XSAT_SCOPE_MASK);
         auto endorsement_idx_xsat = endorsement_xsat.get_index<"byhash"_n>();
-        auto itr_xsat = endorsement_idx_xsat.require_find(chain_state.migrating_hash);
-        chain_state.num_provider_validators = std::max(endorsement_itr->provider_validators.size(), 
-                                                     itr_xsat->provider_validators.size());
+        auto itr_xsat = endorsement_idx_xsat.find(chain_state.migrating_hash);
+        if (itr_xsat != endorsement_idx_xsat.end()) {
+            chain_state.num_provider_validators = std::max(endorsement_itr->provider_validators.size(), 
+                                                         itr_xsat->provider_validators.size());
+        } else {
+            chain_state.num_provider_validators = endorsement_itr->provider_validators.size();
+        }
     } else {
         chain_state.num_provider_validators = endorsement_itr->provider_validators.size();
     }
+
 
     auto consensus_block_itr = _consensus_block.find(consensus_block.bucket_id);
     _consensus_block.modify(consensus_block_itr, same_payer, [&](auto& row) {

@@ -119,10 +119,14 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         validator_active_vote_count = 0;
     }
 
-    // check xsat reward active
-    if (config.is_xsat_reward_active(height)) {
+    // check xsat consensus active
+    if (config.is_xsat_consensus_active(height)) {
 
         check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
+    }
+
+    // check xsat reward active
+    if (config.is_xsat_reward_active(height)) {
 
         // check consecutive vote count
         if (validator_itr->consecutive_vote_count.value() < validator_active_vote_count) {
@@ -265,7 +269,7 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
         }
 
         // XSAT consensus actived
-        if (config.is_xsat_reward_active(height)) {
+        if (config.is_xsat_consensus_active(height)) {
             
             // check active
             if (itr->active_flag.has_value() && itr->active_flag.value() == 0) {
