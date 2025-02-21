@@ -118,6 +118,41 @@ void resource_management::pay(const uint64_t height, const checksum256& hash, co
         token_transfer(get_self(), config.fee_account, {fee_amount, BTC_CONTRACT}, "fee");
     }
 
+    auto feestat_itr = _feestat.find(height);
+    if (feestat_itr == _feestat.end()) {
+        _feestat.emplace(get_self(), [&](auto& row) {
+            row.height = height;
+            // set default value
+            row.blksync_fee = asset{0, BTC_SYMBOL};
+            row.blkent_fee = asset{0, BTC_SYMBOL};
+            row.utxomng_fee = asset{0, BTC_SYMBOL};
+            row.total_fee = asset{0, BTC_SYMBOL};
+
+            // update fee by contract
+            if (has_auth(BLOCK_SYNC_CONTRACT)) {
+                row.blksync_fee = fee_amount;
+            } else if (has_auth(BLOCK_ENDORSE_CONTRACT)) {
+                row.blkent_fee = fee_amount;
+            } else if (has_auth(UTXO_MANAGE_CONTRACT)) {
+                row.utxomng_fee = fee_amount;
+            }
+
+            row.total_fee = fee_amount;
+        });
+    } else {
+        _feestat.modify(feestat_itr, same_payer, [&](auto& row) {
+
+            if (has_auth(BLOCK_SYNC_CONTRACT)) {
+                row.blksync_fee += fee_amount;
+            } else if (has_auth(BLOCK_ENDORSE_CONTRACT)) {
+                row.blkent_fee += fee_amount;
+            } else if (has_auth(UTXO_MANAGE_CONTRACT)) {
+                row.utxomng_fee += fee_amount;
+            }
+            row.total_fee += fee_amount;
+        });
+    }
+
     // log
     resource_management::paylog_action _paylog(get_self(), {get_self(), "active"_n});
     _paylog.send(height, hash, owner, type, fee_amount);
