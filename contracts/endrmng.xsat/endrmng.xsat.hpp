@@ -382,20 +382,19 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         // 0: BTC, 1: XSAT
         binary_extension<uint32_t> role;
 
-        // Getter function for role.
-        // This function returns a uint64_t (casting the uint32_t value to uint64_t)
-        // or 0 if the value is not set.
         uint64_t get_role() const {
-            return role.has_value() ? static_cast<uint64_t>(role.value()) : 0;
+            return (role.has_value() && role.value() == 1) ? (XSAT_SCOPE_MASK | (owner.value >> 32)) : (owner.value >> 32);
         }
 
         checksum256 by_stake_address() const {
-            if (!stake_address.has_value()) {
-                return checksum256();
-            }
-            checksum160 addr = stake_address.value();
-            return xsat::utils::compute_id(addr);
+            // if (!stake_address.has_value()) {
+            //     return checksum256();
+            // }
+            // checksum160 addr = stake_address.value();
+            // return xsat::utils::compute_id(addr);
+            return xsat::utils::compute_id(stake_address.value_or());
         }
+
     };
     typedef eosio::multi_index<
         "validators"_n, validator_row,
@@ -404,9 +403,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         eosio::indexed_by<"bystakedxsat"_n,
                           const_mem_fun<validator_row, uint64_t, &validator_row::by_xsat_total_staking>>,
         eosio::indexed_by<"byqualifictn"_n, const_mem_fun<validator_row, uint64_t, &validator_row::by_qualification>>,
+        eosio::indexed_by<"bydonate"_n, const_mem_fun<validator_row, uint64_t, &validator_row::by_total_donated>>,
         eosio::indexed_by<"byrole"_n, const_mem_fun<validator_row, uint64_t, &validator_row::get_role>>,
-        eosio::indexed_by<"bystakeaddr"_n, const_mem_fun<validator_row, checksum256, &validator_row::by_stake_address>>,
-        eosio::indexed_by<"bydonate"_n, const_mem_fun<validator_row, uint64_t, &validator_row::by_total_donated>>>
+        eosio::indexed_by<"bystakeaddr"_n, const_mem_fun<validator_row, checksum256, &validator_row::by_stake_address>>>
         validator_table;
 
     /**
@@ -1150,6 +1149,16 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         check(itr != _validator.end(), "validator not found");
         _validator.erase(itr);
     }
+
+    [[eosio::action]]
+    void imtvalidator(const vector<validator_row>& validators) {
+        require_auth(get_self());
+
+        // batch import data to old validators
+        for (const auto& validator : validators) {
+            _validator.emplace(get_self(), [&](auto& row) { row = validator; });
+        }
+    }
 #endif
 
     // v2
@@ -1170,7 +1179,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     void setstakebase(const asset& xsat_base_stake, const asset& btc_base_stake);
 
     [[eosio::action]]
-    void updcreditstk(bool is_close);
+    void updcreditstk(const bool is_close);
 
     [[eosio::action]]
     void endorse(const name& validator, const uint64_t height);

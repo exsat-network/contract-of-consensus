@@ -129,7 +129,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     if (config.is_xsat_reward_active(height)) {
 
         // check consecutive vote count
-        if (validator_itr->consecutive_vote_count.value() < validator_active_vote_count) {
+        if (validator_itr->consecutive_vote_count.has_value() && validator_itr->consecutive_vote_count.value() < validator_active_vote_count) {
 
             // send endrmng.xsat::endorse       
             endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});

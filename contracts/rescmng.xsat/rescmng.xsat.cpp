@@ -13,7 +13,7 @@
 [[eosio::action]]
 resource_management::CheckResult resource_management::checkclient(const name& client, const uint8_t type,
                                                                   const optional<string>& version) {
-    check(type == 1 || type == 2, "rescmng.xsat::check: invalid type [1: synchronizer 2: validator]");
+    check(type == 1 || type == 2 || type == 3, "rescmng.xsat::check: invalid type [1: synchronizer 2: btc validator 3: xsat validator]");
     check(client.suffix() == "sat"_n, "rescmng.xsat::check: client must be suffixed with sat");
 
     CheckResult result;
@@ -25,11 +25,12 @@ resource_management::CheckResult resource_management::checkclient(const name& cl
     }
 
     // validator
-    if (type == 2) {
+    if (type == 2 || type == 3) {
         endorse_manage::validator_table _validator(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
         auto validator_itr = _validator.find(client.value);
         result.is_exists = validator_itr != _validator.end();
     }
+    
     result.balance = {0, BTC_SYMBOL};
     auto account_itr = _account.find(client.value);
     if (account_itr != _account.end()) {

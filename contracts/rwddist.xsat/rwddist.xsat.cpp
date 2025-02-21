@@ -167,6 +167,13 @@ void reward_distribution::endtreward(const uint64_t height, uint32_t from_index,
 [[eosio::action]]
 void reward_distribution::endtreward2(const uint64_t height, uint32_t from_index, const uint32_t to_index) {
     require_auth(UTXO_MANAGE_CONTRACT);
+
+    // XSAT Need check first to call
+    auto itr = _xsat_reward_log.find(height);
+    if (itr == _xsat_reward_log.end()) {
+        return;
+    }
+
     endtreward_per_symbol(height, from_index, to_index, false, _xsat_reward_log, _xsat_reward_balance);
 }
 
@@ -224,6 +231,7 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
         } else {
 
             staking_reward_amount = reward_balance.staking_rewards_unclaimed.amount;
+            consensus_reward_amount = reward_balance.consensus_rewards_unclaimed.amount;
         }
 
         reward_details.emplace_back(endorse_manage::reward_details_row{

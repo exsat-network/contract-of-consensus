@@ -668,7 +668,6 @@ void utxo_manage::find_set_next_irreversible_block(utxo_manage::chain_state_row&
     // XSAT reward actived
     if (config.is_xsat_reward_active(chain_state.head_height)) {
         // 
-        check(false, "utxomng.xsat::consensus: test-670");
         // check xsat validators size
         // XSAT endorsement: scope = migrating height | 0x100000000
         block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, chain_state.migrating_height | XSAT_SCOPE_MASK);
