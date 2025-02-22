@@ -197,12 +197,12 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
         return;
     }
 
-    if (to_index < from_index || to_index > reward_log_itr->provider_validators.size()) {
+    if (to_index < from_index) {
         return;
     }
 
+    to_index = std::min(to_index, reward_log_itr->provider_validators.size());
     auto num_reached_consensus = xsat::utils::num_reached_consensus(reward_log_itr->num_validators);
-
 
     vector<endorse_manage::reward_details_row> reward_details;
     reward_details.reserve(to_index - from_index);
