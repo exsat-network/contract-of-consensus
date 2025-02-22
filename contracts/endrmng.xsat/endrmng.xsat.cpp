@@ -1464,7 +1464,6 @@ void endorse_manage::updcreditstk(const bool is_close) {
         if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() != checksum160()) {
             _validator.modify(validator_itr, get_self(), [&](auto& row) {
                 row.role = 0;
-                row.stake_address = stake_address;
                 if (!row.reward_address.has_value() || row.reward_address.value() == checksum160()) {
                     row.reward_address = stake_address;
                 }
