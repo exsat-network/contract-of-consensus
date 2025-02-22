@@ -201,11 +201,11 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
         return;
     }
 
-    to_index = std::min(to_index, reward_log_itr->provider_validators.size());
+    uint32_t limited_to_index = std::min(to_index, reward_log_itr->provider_validators.size());
     auto num_reached_consensus = xsat::utils::num_reached_consensus(reward_log_itr->num_validators);
 
     vector<endorse_manage::reward_details_row> reward_details;
-    reward_details.reserve(to_index - from_index);
+    reward_details.reserve(limited_to_index - from_index);
 
     auto reward_balance = _reward_balance.get_or_default();
     asset total_rewards = {0, reward_log_itr->staking_rewards.symbol};
@@ -214,7 +214,7 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
     int64_t consensus_reward_amount
         = uint128_t(reward_log_itr->consensus_rewards.amount) / reward_log_itr->provider_validators.size();
 
-    for (; from_index < to_index; from_index++) {
+    for (; from_index < limited_to_index; from_index++) {
         auto validator = reward_log_itr->provider_validators[from_index];
         // endorse / consensus staking
         auto endorse_staking = validator.staking;
@@ -246,7 +246,7 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
     }
 
     // transfer to endrmng.xsat
-    token_transfer(get_self(), ENDORSER_MANAGE_CONTRACT, {total_rewards, EXSAT_CONTRACT}, "consensus rewards");
+    token_transfer(get_self(), ENDORSER_MANAGE_CONTRACT, {total_rewards, EXSAT_CONTRACT}, is_btc_validators ? "staking rewards" : "consensus rewards");
 
     // distribute
     endorse_manage::distribute_action _distribute(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
@@ -256,7 +256,7 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
     reward_distribution::endtrwdlog_action _endtrwdlog(get_self(), {get_self(), "active"_n});
     _endtrwdlog.send(height, reward_log_itr->hash, reward_details);
 
-    if (to_index == reward_log_itr->provider_validators.size()) {
+    if (limited_to_index == reward_log_itr->provider_validators.size()) {
         // transfer to poolreg.xsat
         if (reward_log_itr->synchronizer_rewards.amount > 0) {
             token_transfer(get_self(), POOL_REGISTER_CONTRACT, {reward_log_itr->synchronizer_rewards, EXSAT_CONTRACT},
@@ -274,7 +274,7 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
     _reward_balance.set(reward_balance, get_self());
 
     _reward_log.modify(reward_log_itr, same_payer, [&](auto& row) {
-        row.num_validators_assigned = to_index;
+        row.num_validators_assigned = limited_to_index;
         row.latest_exec_time = current_time_point();
 #ifndef UNITTEST
         row.tx_id = xsat::utils::get_trx_id();
