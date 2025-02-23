@@ -45,7 +45,7 @@ void block_endorse::config(const uint64_t limit_endorse_height, const uint16_t l
 //@auth validator
 [[eosio::action]]
 void block_endorse::endorse(const name& validator, const uint64_t height, const checksum256& hash) {
-    require_auth(validator);
+    check(has_auth(validator) || has_auth(get_self()), "1000:blkendt.xsat::endorse: validator or contract auth required");
 
     // Verify whether the endorsement height exceeds limit_endorse_height, 0 means no limit
     auto config = _config.get();
