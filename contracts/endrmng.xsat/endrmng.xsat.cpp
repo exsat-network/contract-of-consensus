@@ -902,7 +902,7 @@ asset endorse_manage::evm_stake_xsat_without_auth(const checksum160& proxy, cons
                                                   const asset& quantity) {
     check(quantity.amount > 0, "endrmng.xsat::evmstakexsat: quantity must be greater than 0");
     check(quantity.symbol == XSAT_SYMBOL, "endrmng.xsat::evmstakexsat: quantity symbol must be XSAT");
-    check(quantity.amount <= XSAT_SUPPLY, "endrmng.xsat::evmstakexsat: quantity must be less than [btc.xsat/BTC] max_supply");
+    check(quantity.amount <= XSAT_SUPPLY, "endrmng.xsat::evmstakexsat: quantity must be less than [exsat.xsat/XSAT] max_supply");
 
     auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::evmstakexsat: [validators] does not exists");
     check(!validator_itr->disabled_staking, "endrmng.xsat::evmstakexsat: the current validator's staking status is disabled");
@@ -1472,7 +1472,7 @@ void endorse_manage::updcreditstk(const bool is_close) {
             });
         } else {
             // copy current record to new_validator, then delete old record, and insert new record
-            record_row new_validator = *validator_itr;
+            auto new_validator = *validator_itr;
             new_validator.role = 0;
             new_validator.active_flag = active;
             new_validator.qualification = quantity;

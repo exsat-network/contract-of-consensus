@@ -115,8 +115,10 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     revote_record_table _revote_record(get_self(), get_self().value);
     auto revote_record_idx = _revote_record.get_index<"byheight"_n>();
     auto revote_record_itr = revote_record_idx.find(height);
+    auto is_revote = false;
     if (revote_record_itr != revote_record_idx.end() && revote_record_itr->status == 1) {
         validator_active_vote_count = 0;
+        is_revote = true;
     }
 
     // check xsat consensus active
@@ -243,10 +245,13 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         utxo_manage::consensus_action consensus(UTXO_MANAGE_CONTRACT, {get_self(), "active"_n});
         consensus.send(height, hash);
     }
-    
-    // send endrmng.xsat::endorse
-    endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
-    _endorse.send(validator, height);
+
+    // if not revote, send endorse action
+    if (!is_revote) {
+        // send endrmng.xsat::endorse
+        endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
+        _endorse.send(validator, height);
+    }
 }
 
 std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_validator_by_btc_stake(const uint64_t height, const uint8_t consecutive_vote_count) {
@@ -361,11 +366,18 @@ void block_endorse::revote(const name& synchronizer, const uint64_t height) {
     });
 
     // calculate required votes
-    const uint64_t total_synchronizers = std::distance(_synchronizer.begin(), _synchronizer.end());
+    // filter active synchronizers
+    std::vector<name> active_synchronizers;
+    for(auto sync_itr = _synchronizer.begin(); sync_itr != _synchronizer.end(); sync_itr++) {
+        if(sync_itr->produced_block_limit == 0 || 
+           chain_state.head_height - sync_itr->latest_produced_block_height <= sync_itr->produced_block_limit) {
+            active_synchronizers.push_back(sync_itr->synchronizer);
+        }
+    }
+
+    const uint64_t total_synchronizers = active_synchronizers.size();
     const uint64_t required_votes = (total_synchronizers / 2) + 1;
-
     const auto now = time_point_sec(current_time_point());
-
     if (pending_itr == ub) {
         _revote_record.emplace(get_self(), [&](auto& rec) {
             rec.id            = _revote_record.available_primary_key();
@@ -419,7 +431,7 @@ void block_endorse::migrate_endorsements(const uint64_t src_scope) {
     auto it = src_endorsements.begin();
     while (it != src_endorsements.end()) {
         dest_endorsements.emplace(get_self(), [&](auto& new_row) {
-            new_row = *it; // 整体拷贝 endorsement_row 结构体内容
+            new_row = *it; // copy endorsement_row content
         });
         it = src_endorsements.erase(it);
     }
