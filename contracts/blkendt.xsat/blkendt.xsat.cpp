@@ -223,6 +223,13 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         });
         reached_consensus = endorsement_itr->num_reached_consensus() <= endorsement_itr->provider_validators.size();
     }
+    
+    // if not revote, send endorse action
+    if (!is_revote) {
+        // send endrmng.xsat::endorse
+        endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
+        _endorse.send(validator, height);
+    }
 
     if (reached_consensus) {
         // For consensus version 2 with XSAT consensus enabled, verify that the XSAT endorsement result
@@ -237,6 +244,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
             // exceeds the number of provider validators from the BTC endorsement, then do not proceed.
             if (other_endorsement_itr == other_endorsement_idx.end() ||
                 other_endorsement_itr->num_reached_consensus() > other_endorsement_itr->provider_validators.size()) {
+                
                 return;
             }
         }
@@ -244,13 +252,6 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         // If consensus conditions are met, trigger the consensus action.
         utxo_manage::consensus_action consensus(UTXO_MANAGE_CONTRACT, {get_self(), "active"_n});
         consensus.send(height, hash);
-    }
-
-    // if not revote, send endorse action
-    if (!is_revote) {
-        // send endrmng.xsat::endorse
-        endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
-        _endorse.send(validator, height);
     }
 }
 

@@ -1499,12 +1499,14 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
     }
     
     // check height
-    if (validator_itr->latest_consensus_block.has_value() && height == validator_itr->latest_consensus_block.value()) {
+    if (validator_itr->latest_consensus_block.has_value() && height <= validator_itr->latest_consensus_block.value()) {
         return;
     }
 
     _validator.modify(validator_itr, get_self(), [&](auto& row) {
+        // if the validator has not voted for the previous block, or the previous block is the current block, then the validator is consecutive
         bool is_consecutive = row.latest_consensus_block.has_value() && (height == row.latest_consensus_block.value() + 1);
+
         row.consecutive_vote_count = is_consecutive ? row.consecutive_vote_count.value_or(0ULL) + 1ULL : 1ULL;
         row.latest_consensus_block = height;
     });
