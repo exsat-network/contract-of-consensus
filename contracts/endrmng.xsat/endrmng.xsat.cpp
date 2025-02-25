@@ -1496,12 +1496,14 @@ void endorse_manage::updcreditstk(const bool is_close) {
                     row.reward_address = stake_address;
                 }
                 row.active_flag = active;
+                row.donate_rate = 0;
                 row.qualification = quantity;
             });
         } else {
             // copy current record to new_validator, then delete old record, and insert new record
             auto new_validator = *validator_itr;
             new_validator.role = 0;
+            new_validator.donate_rate = 0;
             new_validator.active_flag = active;
             new_validator.qualification = quantity;
             if (!new_validator.reward_address.has_value() || new_validator.reward_address.value() == checksum160()) {
