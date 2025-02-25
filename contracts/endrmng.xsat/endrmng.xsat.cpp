@@ -588,6 +588,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
     auto evm_staker_idx = _evm_stake.get_index<"bystakingid"_n>();
     auto stake_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
+    auto qualification_changed = qualification;
 
     // v2 check base stake amount
     auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value():0;
@@ -605,6 +606,10 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
             active_flag = 0;
         }
+    // if not stake address and xsat consensus is active, only BTC validator stake address add qualification
+    }else if (config.is_xsat_consensus_active(chain_state.head_height)){
+
+        qualification_changed = asset{0, BTC_SYMBOL};
     }
 
     if (stake_itr == evm_staker_idx.end()) {
@@ -623,9 +628,9 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
             row.consensus_reward_claimed = asset{0, XSAT_SYMBOL};
         });
 
-        staking_change(validator_itr, _evm_stake, stake_itr, quantity, qualification, active_flag);
+        staking_change(validator_itr, _evm_stake, stake_itr, quantity, qualification_changed, active_flag);
     } else {
-        staking_change(validator_itr, evm_staker_idx, stake_itr, quantity, qualification, active_flag);
+        staking_change(validator_itr, evm_staker_idx, stake_itr, quantity, qualification_changed, active_flag);
     }
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
@@ -645,6 +650,7 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
                                                  "endrmng.xsat::evmunstake: [validators] does not exists");
 
     // v2 check base stake amount
+    auto qualification_changed = qualification;
     auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value():0;
     if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == evm_staker_itr->staker) {
 
@@ -657,9 +663,21 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
 
             active_flag = 0;
         }
+    }else{
+        // chain state
+        utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+        auto chain_state = _chain_state.get();
+
+        // check base stake
+        block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+        auto config = _config.get_or_default();
+
+        if (config.is_xsat_consensus_active(chain_state.head_height)){
+            qualification_changed = asset{0, BTC_SYMBOL};
+        }
     }
 
-    staking_change(validator_itr, evm_staker_idx, evm_staker_itr, -quantity, -qualification, active_flag);
+    staking_change(validator_itr, evm_staker_idx, evm_staker_itr, -quantity, -qualification_changed, active_flag);
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
 
@@ -670,6 +688,27 @@ std::pair<asset, asset> endorse_manage::stake_without_auth(const name& staker, c
 
     auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::stake: [validators] does not exists");
     check(!validator_itr->disabled_staking, "endrmng.xsat::stake: the current validator's staking status is disabled");
+
+    // v2
+    if (validator_itr->role.has_value()) {
+
+        check(validator_itr->role.value() == 0, "endrmng.xsat::evmstake: only BTC validator can be staked");
+    }
+    
+    // chain state
+    auto qualification_changed = qualification;
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+
+    block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto config = _config.get_or_default();
+    if (config.is_xsat_consensus_active(chain_state.head_height)){
+
+        // check base stake
+        check(validator_itr->qualification >= config.get_btc_base_stake(), "endrmng.xsat::stake: quantity must be greater than or equal to base stake");
+        // native stake qualification is 0, because stake address is a evm address only stake by evm
+        qualification_changed = asset{0, BTC_SYMBOL};
+    }
 
     auto native_staker_idx = _native_stake.get_index<"bystakingid"_n>();
     auto stake_itr = native_staker_idx.find(compute_staking_id(staker, validator));
@@ -688,9 +727,9 @@ std::pair<asset, asset> endorse_manage::stake_without_auth(const name& staker, c
             row.consensus_reward_unclaimed = asset{0, XSAT_SYMBOL};
             row.consensus_reward_claimed = asset{0, XSAT_SYMBOL};
         });
-        staking_change(validator_itr, _native_stake, stake_itr, quantity, qualification, std::nullopt);
+        staking_change(validator_itr, _native_stake, stake_itr, quantity, qualification_changed, std::nullopt);
     } else {
-        staking_change(validator_itr, native_staker_idx, stake_itr, quantity, qualification, std::nullopt);
+        staking_change(validator_itr, native_staker_idx, stake_itr, quantity, qualification_changed, std::nullopt);
     }
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
@@ -709,7 +748,19 @@ std::pair<asset, asset> endorse_manage::unstake_without_auth(const name& staker,
     auto validator_itr = _validator.require_find(native_staker_itr->validator.value,
                                                  "endrmng.xsat::unstake: [validators] does not exists");
 
-    staking_change(validator_itr, native_staker_idx, native_staker_itr, -quantity, -qualification, std::nullopt);
+    // chain state
+    auto qualification_changed = qualification;
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+
+    block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto config = _config.get_or_default();
+    if (config.is_xsat_consensus_active(chain_state.head_height)){
+
+        qualification_changed = asset{0, BTC_SYMBOL};
+    }
+
+    staking_change(validator_itr, native_staker_idx, native_staker_itr, -quantity, -qualification_changed, std::nullopt);
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
 

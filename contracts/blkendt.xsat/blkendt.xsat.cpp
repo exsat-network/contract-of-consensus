@@ -354,7 +354,7 @@ void block_endorse::revote(const name& synchronizer, const uint64_t height) {
     // check synchronizer latest producer height
     check(synchronizer_itr->produced_block_limit == 0
             || chain_state.head_height - synchronizer_itr->latest_produced_block_height <= synchronizer_itr->produced_block_limit,
-        "2006:blksync.xsat::initbucket: to become a synchronizer, a block must be produced within 72 hours");
+        "2006:blksync.xsat::revote: to become a synchronizer, a block must be produced within 72 hours");
 
     revote_record_table _revote_record(get_self(), get_self().value);
     auto height_index = _revote_record.get_index<"byheight"_n>();
