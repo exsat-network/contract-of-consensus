@@ -428,11 +428,13 @@ void block_endorse::migrate_endorsements(const uint64_t src_scope) {
     uint64_t dest_scope = src_scope | FINAL_MASK;
     endorsement_table dest_endorsements(get_self(), dest_scope);
 
+    print("migrate_endorsements: src_scope: ", src_scope, " dest_scope: ", dest_scope, "\n");
     // foreach in src_endorsements
     auto it = src_endorsements.begin();
     while (it != src_endorsements.end()) {
         dest_endorsements.emplace(get_self(), [&](auto& new_row) {
             new_row = *it; // copy endorsement_row content
+            new_row.id = dest_endorsements.available_primary_key();
         });
         it = src_endorsements.erase(it);
     }

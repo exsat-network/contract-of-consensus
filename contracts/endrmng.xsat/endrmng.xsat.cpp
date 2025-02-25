@@ -1326,11 +1326,32 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
         check(validator_itr->xsat_quantity.amount == 0, "endrmng.xsat::evmsetstaker: the validator's xsat quantity must be 0");
     }
 
+    // read qualification from evm_stake
+    auto qualification = asset{0, BTC_SYMBOL};
+    auto evm_staker_idx = _evm_stake.get_index<"bystaker"_n>();
+    auto stake_itr = evm_staker_idx.find(xsat::utils::compute_id(stake_addr));
+    if (stake_itr != evm_staker_idx.end()) {
+
+        auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
+        auto lb = evm_staker_idx.lower_bound(xsat::utils::compute_id(stake_addr));
+        auto ub = evm_staker_idx.upper_bound(xsat::utils::compute_id(stake_addr));
+        while (lb != ub) {
+            if (lb->validator == validator_itr->owner) {
+                auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
+                if (credit_proxy_itr == credit_proxy_idx.end()) {
+                    qualification += lb->quantity;
+                }
+            }
+            lb++;
+        }
+    }
+
     if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() != checksum160()) {
 
         // Modify the validator's stake address
         _validator.modify(validator_itr, get_self(), [&](auto& row) {
             row.stake_address = stake_addr;  // Modify the stake address to the new one
+            row.qualification = qualification;
         });
         return;
     }
@@ -1338,6 +1359,8 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
     // erase and copy set stake address
     auto new_validator = *validator_itr;
     new_validator.stake_address = stake_addr;
+    new_validator.qualification = qualification;
+
     _validator.erase(validator_itr);
     _validator.emplace(get_self(), [&](auto& row) {
         row = new_validator;
@@ -1451,7 +1474,6 @@ void endorse_manage::updcreditstk(const bool is_close) {
                 }
                 lb++;
             }
-            print(validator_itr->owner, " stake quantity: ", quantity, "\n");
         } else {
             quantity = validator_itr->quantity;
         }
