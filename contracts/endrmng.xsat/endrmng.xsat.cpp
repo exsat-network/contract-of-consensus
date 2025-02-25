@@ -590,7 +590,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
     auto stake_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
 
     // v2 check base stake amount
-    auto active_flag = 0;
+    auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value():0;
     if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == stake_itr->staker) {
 
         auto stake_quantity = quantity;
@@ -645,12 +645,12 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
                                                  "endrmng.xsat::evmunstake: [validators] does not exists");
 
     // v2 check base stake amount
-    auto active_flag = 0;
+    auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value():0;
     if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == evm_staker_itr->staker) {
 
         block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
         auto config = _config.get_or_default();
-        if (evm_staker_itr->quantity + quantity >= config.get_btc_base_stake()) {
+        if (evm_staker_itr->quantity - quantity >= config.get_btc_base_stake()) {
 
             active_flag = 1;
         } else {
@@ -720,6 +720,11 @@ void endorse_manage::staking_change(validator_table::const_iterator& validator_i
     auto now_amount_for_validator = validator_itr->quantity + quantity;
     auto pre_amount_for_staker = stake_itr->quantity;
     auto now_amount_for_staker = stake_itr->quantity + quantity;
+    
+    auto now_qualification = validator_itr->qualification + qualification;
+    // check qualify must be greater than or equal to 0
+    check(now_amount_for_validator.amount >= 0, "endrmng.xsat: now_amount_for_validator must be greater than or equal to 0");
+    check(now_qualification.amount >= 0, "endrmng.xsat: now_qualification must be greater than or equal to 0");
 
     _validator.modify(validator_itr, same_payer, [&](auto& row) {
         row.quantity = now_amount_for_validator;
@@ -1460,11 +1465,12 @@ void endorse_manage::updcreditstk(const bool is_close) {
         asset quantity = asset{0, BTC_SYMBOL};
 
         // get stake address from memo
-        checksum160 stake_address = xsat::utils::evm_address_to_checksum160(validator_itr->memo);
+        checksum160 stake_address = validator_itr->stake_address.has_value() ? validator_itr->stake_address.value():xsat::utils::evm_address_to_checksum160(validator_itr->memo);
 
         if (is_close) {
-            auto lb = evm_staker_idx.lower_bound(xsat::utils::compute_id(stake_address));
-            auto ub = evm_staker_idx.upper_bound(xsat::utils::compute_id(stake_address));
+            auto stake_id = xsat::utils::compute_id(stake_address);
+            auto lb = evm_staker_idx.lower_bound(stake_id);
+            auto ub = evm_staker_idx.upper_bound(stake_id);
             while (lb != ub) {
                 if (lb->validator == validator_itr->owner) {
                     auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
