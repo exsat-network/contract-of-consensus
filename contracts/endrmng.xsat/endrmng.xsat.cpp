@@ -592,7 +592,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
     // v2 check base stake amount
     auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value():0;
-    if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == stake_itr->staker) {
+    if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == staker) {
 
         auto stake_quantity = quantity;
         if (stake_itr != evm_staker_idx.end()) {
@@ -652,7 +652,7 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
     // v2 check base stake amount
     auto qualification_changed = qualification;
     auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value():0;
-    if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == evm_staker_itr->staker) {
+    if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == staker) {
 
         block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
         auto config = _config.get_or_default();
@@ -1492,7 +1492,7 @@ void endorse_manage::updcreditstk(const bool is_close) {
     auto config = _config.get_or_default();
 
     auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
-    auto evm_staker_idx = _evm_stake.get_index<"bystaker"_n>();
+    auto evm_staker_idx = _evm_stake.get_index<"byvalidator"_n>();
 
     // collect validator keys
     std::vector<uint64_t> keys;
@@ -1514,28 +1514,29 @@ void endorse_manage::updcreditstk(const bool is_close) {
 
         int active = 0;
         asset quantity = asset{0, BTC_SYMBOL};
+        asset qualification = asset{0, BTC_SYMBOL};
 
         // get stake address from memo
         checksum160 stake_address = validator_itr->stake_address.has_value() ? validator_itr->stake_address.value():xsat::utils::evm_address_to_checksum160(validator_itr->memo);
 
-        if (is_close) {
-            auto stake_id = xsat::utils::compute_id(stake_address);
-            auto lb = evm_staker_idx.lower_bound(stake_id);
-            auto ub = evm_staker_idx.upper_bound(stake_id);
-            while (lb != ub) {
-                if (lb->validator == validator_itr->owner) {
-                    auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
-                    if (credit_proxy_itr == credit_proxy_idx.end()) {
-                        quantity += lb->quantity;
-                    }
+        auto lb = evm_staker_idx.lower_bound(validator_itr->owner.value);
+        auto ub = evm_staker_idx.upper_bound(validator_itr->owner.value);
+        while (lb != ub) {
+            quantity += lb->quantity;
+            // if close, and stake address is the same, then add qualification
+            if (is_close && lb->staker == stake_address) {
+                auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
+                if (credit_proxy_itr == credit_proxy_idx.end()) {
+                    qualification += lb->quantity;
                 }
-                lb++;
+            }else {
+                // if not close, then add all stake quantity
+                qualification += lb->quantity;
             }
-        } else {
-            quantity = validator_itr->quantity;
+            lb++;
         }
 
-        if (quantity >= config.get_btc_base_stake()) {
+        if (qualification >= config.get_btc_base_stake()) {
             active = 1;
         }
 
@@ -1548,7 +1549,8 @@ void endorse_manage::updcreditstk(const bool is_close) {
                 }
                 row.active_flag = active;
                 row.donate_rate = 0;
-                row.qualification = quantity;
+                row.qualification = qualification;
+                row.quantity = quantity;
             });
         } else {
             // copy current record to new_validator, then delete old record, and insert new record
@@ -1556,7 +1558,8 @@ void endorse_manage::updcreditstk(const bool is_close) {
             new_validator.role = 0;
             new_validator.donate_rate = 0;
             new_validator.active_flag = active;
-            new_validator.qualification = quantity;
+            new_validator.qualification = qualification;
+            new_validator.quantity = quantity;
             if (!new_validator.reward_address.has_value() || new_validator.reward_address.value() == checksum160()) {
                 new_validator.reward_address = stake_address;
             }
@@ -1582,7 +1585,6 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
     // check height
     if (validator_itr->latest_consensus_block.has_value() ) {
         check(height > validator_itr->latest_consensus_block.value(), "endrmng.xsat::endorse: height must be greater than the latest consensus block");
-        return;
     }
 
     _validator.modify(validator_itr, get_self(), [&](auto& row) {
