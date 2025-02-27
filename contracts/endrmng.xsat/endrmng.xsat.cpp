@@ -1580,7 +1580,8 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
     }
     
     // check height
-    if (validator_itr->latest_consensus_block.has_value() && height <= validator_itr->latest_consensus_block.value()) {
+    if (validator_itr->latest_consensus_block.has_value() ) {
+        check(height > validator_itr->latest_consensus_block.value(), "endrmng.xsat::endorse: height must be greater than the latest consensus block");
         return;
     }
 

@@ -70,6 +70,7 @@ void block_endorse::setconheight(const uint64_t xsat_stake_activation_height, co
 
     check(xsat_stake_activation_height > START_HEIGHT, "blkendt.xsat::setconheight: xsat_stake_activation_height must be greater than START_HEIGHT");
     check(xsat_reward_height > START_HEIGHT, "blkendt.xsat::setconheight: xsat_reward_height must be greater than START_HEIGHT");
+    check(xsat_stake_activation_height >= xsat_reward_height, "blkendt.xsat::setconheight: xsat_stake_activation_height must be greater than or equal to xsat_reward_height");
 
     auto config = _config.get_or_default();
     config.xsat_stake_activation_height = xsat_stake_activation_height;
@@ -284,10 +285,21 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
                 continue;
             }
 
-            if (itr->consecutive_vote_count.value() < consecutive_vote_count) {
+            if (consecutive_vote_count > 0) {
+                // if latest endorse block is not the current block, that mean the validator is not endorse previous block
+                // so it not consecutive endorse 
+                auto latest_consensus_block = itr->latest_consensus_block.has_value() ? itr->latest_consensus_block.value() : uint64_t(0);
+                if (height - latest_consensus_block > 1) {
 
-                itr++;
-                continue;
+                    itr++;
+                    continue;
+                }
+
+                if (itr->consecutive_vote_count.value() < consecutive_vote_count) {
+
+                    itr++;
+                    continue;
+                }
             }
         }
 
@@ -325,11 +337,23 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
                 continue;
             }
 
-            if (itr->consecutive_vote_count.value() < consecutive_vote_count) {
+            if (consecutive_vote_count > 0) {
+                 // if latest endorse block is not the current block, that mean the validator is not endorse previous block
+                // so it not consecutive endorse 
+                auto latest_consensus_block = itr->latest_consensus_block.has_value() ? itr->latest_consensus_block.value() : uint64_t(0);
+                if (height - latest_consensus_block > 1) {
 
-                itr++;
-                continue;
+                    itr++;
+                    continue;
+                }
+
+                if (itr->consecutive_vote_count.value() < consecutive_vote_count) {
+
+                    itr++;
+                    continue;
+                }
             }
+
         }
 
         result.emplace_back(requested_validator_info{.account = itr->owner, .staking = static_cast<uint64_t>(itr->xsat_quantity.amount)});
@@ -360,7 +384,7 @@ void block_endorse::revote(const name& synchronizer, const uint64_t height) {
     auto height_index = _revote_record.get_index<"byheight"_n>();
 
     // use lower_bound and upper_bound to find pending record
-    auto lb = height_index.lower_bound(height);
+    auto lb = height_index.lower_bound(height + 1);
     auto ub = height_index.upper_bound(height);
     auto pending_itr = std::find_if(lb, ub, [](const auto& rec) {
         return rec.status == 0;
