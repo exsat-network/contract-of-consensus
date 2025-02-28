@@ -1034,10 +1034,9 @@ asset endorse_manage::evm_unstake_xsat_without_auth(const checksum160& proxy, co
     auto validator_itr
         = _validator.require_find(evm_staker_itr->validator.value, "endrmng.xsat::evmunstkxsat: [validators] does not exists");
 
-    evm_staker_idx.modify(evm_staker_itr, same_payer, [&](auto& row) { row.xsat_quantity -= quantity; });
-
     auto active_flag = validator_itr->active_flag.value();
     auto stake_amount = evm_staker_itr->xsat_quantity;
+
     // V2 check base stake amount
     if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() == staker) {
 
@@ -1053,6 +1052,7 @@ asset endorse_manage::evm_unstake_xsat_without_auth(const checksum160& proxy, co
         }
     }
 
+    evm_staker_idx.modify(evm_staker_itr, same_payer, [&](auto& row) { row.xsat_quantity -= quantity; });
     _validator.modify(validator_itr, same_payer, [&](auto& row) {
         row.xsat_quantity -= quantity;
         row.latest_staking_time = current_time_point();
@@ -1137,7 +1137,7 @@ asset endorse_manage::unstake_xsat_without_auth(const name& staker, const name& 
     stat.xsat_total_staking -= quantity;
     _stat.set(stat, get_self());
 
-    return validator_itr->quantity;
+    return validator_itr->xsat_quantity;
 }
 
 //============================================================== credit staking btc  =========================================================
