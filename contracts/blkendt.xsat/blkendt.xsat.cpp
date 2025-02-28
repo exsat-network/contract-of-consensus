@@ -215,8 +215,14 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
                                 endorsement_itr->requested_validators.end(), [&](const requested_validator_info& a) {
                                     return a.account == validator;
                                 });
+        // if validator not in requested_validators list, send endrmng.xsat::endorse
+        if (itr == endorsement_itr->requested_validators.end()) {
+            // send endrmng.xsat::endorse
+            endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
+            _endorse.send(validator, height);
+            return;
+        }
 
-        check(itr != endorsement_itr->requested_validators.end(), err_msg);
         endorsement_idx.modify(endorsement_itr, same_payer, [&](auto& row) {
             row.provider_validators.push_back(
                 {.account = itr->account, .staking = itr->staking, .created_at = current_time_point()});

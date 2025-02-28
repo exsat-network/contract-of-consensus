@@ -188,7 +188,6 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
     // check(to_index > from_index && to_index <= reward_log_itr->provider_validators.size(),
     //       "rwddist.xsat::endtreward: invalid to_index");
 
-    // FIXME: num_validators_assigned 
     if (reward_log_itr->num_validators_assigned > reward_log_itr->provider_validators.size()) {
         return;
     }
