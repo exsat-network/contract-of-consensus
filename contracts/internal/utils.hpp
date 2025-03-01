@@ -49,13 +49,12 @@ namespace xsat::utils {
     static checksum256 hash(const vector<uint8_t>& data) { return sha256((char*)data.data(), data.size()); }
 
     static name parse_name(const string& str) {
-        if (str.length() == 0 || str.length() > 13) return {};
+        if (str.length() == 0 || str.length() > 12) return {};
         int i = -1;
         for (const auto c : str) {
             i++;
-            if (islower(c) || (isdigit(c) && c <= '6') || c == '.') {
-                if (i == 0 && !islower(c)) return {};
-                if (i == 12 && (c < 'a' || c > 'j')) return {};
+            if (islower(c) || (isdigit(c) && c >= '1' && c <= '5') || c == '.') {
+                if (i == 0 && c == '.') return {};
             } else
                 return {};
         }
