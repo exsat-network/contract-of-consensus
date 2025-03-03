@@ -160,6 +160,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
     auto endorsement_itr = endorsement_idx.find(hash);
     bool reached_consensus = false;
+    bool is_send_endorse = !is_revote;
 
     auto err_msg = "1005:blkendt.xsat::endorse: validator not in requested_validators list";
     if (endorsement_itr == endorsement_idx.end()) {
@@ -229,10 +230,15 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
             row.requested_validators.erase(itr);
         });
         reached_consensus = endorsement_itr->num_reached_consensus() <= endorsement_itr->provider_validators.size();
+
+        // if validator latest consensus block greater than current height, don't send endorse
+        if (validator_itr->latest_consensus_block.has_value() && validator_itr->latest_consensus_block.value() >= height) {
+            is_send_endorse = false;
+        }
     }
     
     // if not revote, send endorse action
-    if (!is_revote) {
+    if (is_send_endorse) {
         // send endrmng.xsat::endorse
         endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
         _endorse.send(validator, height);
