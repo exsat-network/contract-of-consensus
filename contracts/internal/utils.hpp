@@ -50,6 +50,7 @@ namespace xsat::utils {
 
     static name parse_name(const string& str) {
         if (str.length() == 0 || str.length() > 12) return {};
+        if (str.back() == '.') return {};
         for (const auto c : str) {
             if (!(islower(c) || (c >= '1' && c <= '5') || c == '.')) {
                 return {};
