@@ -30,6 +30,16 @@ void endorse_manage::setdonateacc(const string& donation_account, const uint16_t
     _config.set(config, get_self());
 }
 
+[[eosio::action]]
+void endorse_manage::setdepproxy(const checksum160& btc_deposit_proxy, const checksum160& xsat_deposit_proxy) {
+    require_auth(get_self());
+
+    auto config = _config.get_or_default();
+    config.btc_deposit_proxy = btc_deposit_proxy;
+    config.xsat_deposit_proxy = xsat_deposit_proxy;
+    _config.set(config, get_self());
+}
+
 //@auth get_self()
 [[eosio::action]]
 void endorse_manage::addwhitelist(const name& type, const name& account) {
@@ -570,14 +580,27 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
         check(validator_itr->role.value() == 0, "endrmng.xsat::evmstake: only BTC validator can be staked");
     }
 
+    // check deposit proxy
+    auto config = _config.get_or_default();
+    if (config.btc_deposit_proxy.has_value() && validator_itr->stake_address.has_value()) {
+
+        if (config.btc_deposit_proxy.value() == proxy ){
+            check(staker == validator_itr->stake_address.value(), "endrmng.xsat::evmstake: only the validator's stake address can stake");
+        }
+
+        if (staker == validator_itr->stake_address.value()){
+            check(config.btc_deposit_proxy.value() == proxy, "endrmng.xsat::evmstake: stake address only can stake by deposit proxy");
+        }
+    }
+
     // chain state
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
 
     // check base stake
-    block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
-    auto config = _config.get_or_default();
-    if (config.is_xsat_consensus_active(chain_state.head_height) && validator_itr->active_flag.value() == 0 ) {
+    block_endorse::config_table _blkconfig = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto blkconfig = _blkconfig.get_or_default();
+    if (blkconfig.is_xsat_consensus_active(chain_state.head_height) && validator_itr->active_flag.value() == 0 ) {
 
         // need to check base stake
         if (validator_itr->stake_address.has_value()) {
@@ -599,7 +622,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
             stake_quantity += stake_itr->quantity;
         }
-        if (stake_quantity >= config.get_btc_base_stake()) {
+        if (stake_quantity >= blkconfig.get_btc_base_stake()) {
 
             active_flag = 1;
         } else {
@@ -607,7 +630,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
             active_flag = 0;
         }
     // if not stake address and xsat consensus is active, only BTC validator stake address add qualification
-    }else if (config.is_xsat_consensus_active(chain_state.head_height)){
+    }else if (blkconfig.is_xsat_consensus_active(chain_state.head_height)){
 
         qualification_changed = asset{0, BTC_SYMBOL};
     }
@@ -966,6 +989,13 @@ asset endorse_manage::evm_stake_xsat_without_auth(const checksum160& proxy, cons
 
     // xsat stake address must be the same as validator's stake address
     check(validator_itr->stake_address.value() == staker, "endrmng.xsat::evmstake: only the validator's stake address can stake");
+
+    // TODO: only open xsat delegate stake, check deposit proxy
+    // auto config = _config.get();
+    // if (config.xsat_deposit_proxy.has_value() && config.xsat_deposit_proxy.value() == proxy) {
+
+    //     check(staker == validator_itr->stake_address.value(), "endrmng.xsat::evmstake: only the validator's stake address can stake");
+    // }
 
     auto evm_staker_idx = _evm_stake.get_index<"bystakingid"_n>();
     auto staker_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));

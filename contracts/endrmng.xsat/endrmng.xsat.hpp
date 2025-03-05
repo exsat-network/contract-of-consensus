@@ -63,6 +63,8 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     struct [[eosio::table]] config_row {
         string donation_account;
         binary_extension<uint16_t> min_donate_rate;
+        binary_extension<checksum160> btc_deposit_proxy;
+        binary_extension<checksum160> xsat_deposit_proxy;
     };
     typedef eosio::singleton<"config"_n, config_row> config_table;
 
@@ -1183,6 +1185,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     [[eosio::action]]
     void endorse(const name& validator, const uint64_t height);
+
+    [[eosio::action]]
+    void setdepproxy(const checksum160& btc_deposit_proxy, const checksum160& xsat_deposit_proxy);
 
     // logs
     [[eosio::action]]
