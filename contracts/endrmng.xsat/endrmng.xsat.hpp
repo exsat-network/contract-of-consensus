@@ -1307,6 +1307,16 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         require_auth(get_self());
     }
 
+    [[eosio::action]]
+    void setstakerlog(const name& validator, const checksum160& stake_addr) {
+        require_auth(get_self());
+    }
+
+    [[eosio::action]]
+    void setrwdadrlog(const name& validator, const checksum160& reward_addr) {
+        require_auth(get_self());
+    }
+
     using stake_action = eosio::action_wrapper<"stake"_n, &endorse_manage::stake>;
     using unstake_action = eosio::action_wrapper<"unstake"_n, &endorse_manage::unstake>;
     using evm_stake_action = eosio::action_wrapper<"evmstake"_n, &endorse_manage::evmstake>;
@@ -1344,6 +1354,8 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     
     using regvldtorlog_action = eosio::action_wrapper<"regvldtorlog"_n, &endorse_manage::regvldtorlog>;
     using endorse_action = eosio::action_wrapper<"endorse"_n, &endorse_manage::endorse>;
+    using setstakerlog_action = eosio::action_wrapper<"setstakerlog"_n, &endorse_manage::setstakerlog>;
+    using setrwdadrlog_action = eosio::action_wrapper<"setrwdadrlog"_n, &endorse_manage::setrwdadrlog>;
 
     static checksum256 compute_staking_id(const checksum160& proxy, const checksum160& staker, const name& validator) {
         vector<char> result;
