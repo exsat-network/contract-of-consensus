@@ -230,14 +230,14 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
             row.requested_validators.erase(itr);
         });
         reached_consensus = endorsement_itr->num_reached_consensus() <= endorsement_itr->provider_validators.size();
-
-        // if validator latest consensus block greater than current height, don't send endorse
-        if (validator_itr->latest_consensus_block.has_value() && validator_itr->latest_consensus_block.value() >= height) {
-            is_send_endorse = false;
-        }
     }
     
-    // if not revote, send endorse action
+    // if validator endorse a new block or in the requested_validators list
+    // Even the validator latest consensus block is greater than current height, don't send endorse
+    if (validator_itr->latest_consensus_block.has_value() && validator_itr->latest_consensus_block.value() >= height) {
+        is_send_endorse = false;
+    }
+    
     if (is_send_endorse) {
         // send endrmng.xsat::endorse
         endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
