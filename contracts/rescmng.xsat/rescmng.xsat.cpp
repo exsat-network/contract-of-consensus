@@ -13,7 +13,7 @@
 [[eosio::action]]
 resource_management::CheckResult resource_management::checkclient(const name& client, const uint8_t type,
                                                                   const optional<string>& version) {
-    check(type == 1 || type == 2, "rescmng.xsat::check: invalid type [1: synchronizer 2: validator]");
+    check(type == 1 || type == 2 || type == 3, "rescmng.xsat::check: invalid type [1: synchronizer 2: btc validator 3: xsat validator]");
     check(client.suffix() == "sat"_n, "rescmng.xsat::check: client must be suffixed with sat");
 
     CheckResult result;
@@ -25,11 +25,12 @@ resource_management::CheckResult resource_management::checkclient(const name& cl
     }
 
     // validator
-    if (type == 2) {
+    if (type == 2 || type == 3) {
         endorse_manage::validator_table _validator(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
         auto validator_itr = _validator.find(client.value);
         result.is_exists = validator_itr != _validator.end();
     }
+    
     result.balance = {0, BTC_SYMBOL};
     auto account_itr = _account.find(client.value);
     if (account_itr != _account.end()) {
@@ -115,6 +116,41 @@ void resource_management::pay(const uint64_t height, const checksum256& hash, co
     auto config = _config.get();
     if (fee_amount.amount > 0) {
         token_transfer(get_self(), config.fee_account, {fee_amount, BTC_CONTRACT}, "fee");
+    }
+
+    auto feestat_itr = _feestat.find(height);
+    if (feestat_itr == _feestat.end()) {
+        _feestat.emplace(get_self(), [&](auto& row) {
+            row.height = height;
+            // set default value
+            row.blksync_fee = asset{0, BTC_SYMBOL};
+            row.blkent_fee = asset{0, BTC_SYMBOL};
+            row.utxomng_fee = asset{0, BTC_SYMBOL};
+            row.total_fee = asset{0, BTC_SYMBOL};
+
+            // update fee by contract
+            if (has_auth(BLOCK_SYNC_CONTRACT)) {
+                row.blksync_fee = fee_amount;
+            } else if (has_auth(BLOCK_ENDORSE_CONTRACT)) {
+                row.blkent_fee = fee_amount;
+            } else if (has_auth(UTXO_MANAGE_CONTRACT)) {
+                row.utxomng_fee = fee_amount;
+            }
+
+            row.total_fee = fee_amount;
+        });
+    } else {
+        _feestat.modify(feestat_itr, same_payer, [&](auto& row) {
+
+            if (has_auth(BLOCK_SYNC_CONTRACT)) {
+                row.blksync_fee += fee_amount;
+            } else if (has_auth(BLOCK_ENDORSE_CONTRACT)) {
+                row.blkent_fee += fee_amount;
+            } else if (has_auth(UTXO_MANAGE_CONTRACT)) {
+                row.utxomng_fee += fee_amount;
+            }
+            row.total_fee += fee_amount;
+        });
     }
 
     // log

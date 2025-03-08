@@ -202,11 +202,8 @@ void utxo_manage::consensus(const uint64_t height, const checksum256& hash) {
         return;
     }
 
-    block_endorse::endorsement_table _endorsement(BLOCK_ENDORSE_CONTRACT, height);
-    auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
-    auto endorsement_itr = endorsement_idx.find(hash);
-
-    if (endorsement_itr == endorsement_idx.end() || !endorsement_itr->reached_consensus()) {
+    // Check whether consensus has been reached based on endorsement data.
+    if (!is_endorsement_consensus_reached(height, hash)) {
         return;
     }
 
@@ -214,7 +211,7 @@ void utxo_manage::consensus(const uint64_t height, const checksum256& hash) {
     if (passed_index_itr->miner && passed_index_itr->synchronizer != passed_index_itr->miner) {
         block_sync::block_miner_table _block_miner(BLOCK_SYNC_CONTRACT, height);
         auto block_miner_idx = _block_miner.get_index<"byhash"_n>();
-        auto block_miner_itr = block_miner_idx.require_find(hash);
+        auto block_miner_itr = block_miner_idx.require_find(hash, "utxomng.xsat::consensus: block miner does not exist");
 
         if (block_miner_itr->expired_block_num > current_block_number()) {
             return;
@@ -273,12 +270,44 @@ void utxo_manage::consensus(const uint64_t height, const checksum256& hash) {
 
     // Set the block height of the latest migration
     find_set_next_irreversible_block(chain_state);
-
     _chain_state.set(chain_state, get_self());
 
     // consensus
     block_sync::consensus_action block_sync_consensus(BLOCK_SYNC_CONTRACT, {get_self(), "active"_n});
     block_sync_consensus.send(height, passed_index_itr->synchronizer, passed_index_itr->bucket_id);
+}
+
+//---------------------------------------------------------------------
+// Helper function: Check if endorsement consensus is reached
+//---------------------------------------------------------------------
+// This function reads the endorsement data from two scopes:
+// 1. BTC endorsement table (scope = height)
+// 2. XSAT endorsement table (scope = height | 0x100000000)
+// It returns true if either endorsement table indicates consensus.
+bool utxo_manage::is_endorsement_consensus_reached(const uint64_t height, const checksum256& hash) {
+    // Check BTC endorsement (scope = height)
+    block_endorse::endorsement_table endorsement_btc(BLOCK_ENDORSE_CONTRACT, height);
+    auto endorsement_idx_btc = endorsement_btc.get_index<"byhash"_n>();
+    auto itr_btc = endorsement_idx_btc.find(hash);
+    bool btc_consensus = (itr_btc != endorsement_idx_btc.end() && itr_btc->reached_consensus());
+
+    // check consensus version
+    block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto config = _config.get_or_default();
+
+    // XSAT consensus inactive
+    if (!config.is_xsat_consensus_active(height)) {
+        return btc_consensus;
+    }
+
+    // Check XSAT endorsement (scope = height | 0x100000000)
+    block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, height | XSAT_SCOPE_MASK);
+    auto endorsement_idx_xsat = endorsement_xsat.get_index<"byhash"_n>();
+    auto itr_xsat = endorsement_idx_xsat.find(hash);
+    bool xsat_consensus = (itr_xsat != endorsement_idx_xsat.end() && itr_xsat->reached_consensus());
+
+    // Return true if both BTC and XSAT endorsements indicate consensus.
+    return btc_consensus && xsat_consensus;
 }
 
 //@auth
@@ -354,6 +383,16 @@ utxo_manage::process_block_result utxo_manage::processblock(const name& synchron
         // distribute rewards to validators in batches
         reward_distribution::endtreward_action _endtreward(REWARD_DISTRIBUTION_CONTRACT, {get_self(), "active"_n});
         _endtreward.send(chain_state.migrating_height, from_index, to_index);
+
+        block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+        auto config = _config.get_or_default();
+
+        // XSAT reward actived 
+        if (config.is_xsat_reward_active(chain_state.migrating_height)) {
+            // check xsat validators size
+            reward_distribution::endtreward2_action _endtreward2(REWARD_DISTRIBUTION_CONTRACT, {get_self(), "active"_n});
+            _endtreward2.send(chain_state.migrating_height, from_index, to_index);
+        }
 
         if (chain_state.num_provider_validators == chain_state.num_validators_assigned) {
             chain_state.irreversible_height = chain_state.migrating_height;
@@ -622,7 +661,28 @@ void utxo_manage::find_set_next_irreversible_block(utxo_manage::chain_state_row&
     block_endorse::endorsement_table _endorsement(BLOCK_ENDORSE_CONTRACT, chain_state.migrating_height);
     auto endorsement_idx = _endorsement.get_index<"byhash"_n>();
     auto endorsement_itr = endorsement_idx.require_find(chain_state.migrating_hash);
-    chain_state.num_provider_validators = endorsement_itr->provider_validators.size();
+
+    block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto config = _config.get_or_default();
+
+    // XSAT reward actived
+    if (config.is_xsat_reward_active(chain_state.head_height)) {
+        // 
+        // check xsat validators size
+        // XSAT endorsement: scope = migrating height | 0x100000000
+        block_endorse::endorsement_table endorsement_xsat(BLOCK_ENDORSE_CONTRACT, chain_state.migrating_height | XSAT_SCOPE_MASK);
+        auto endorsement_idx_xsat = endorsement_xsat.get_index<"byhash"_n>();
+        auto itr_xsat = endorsement_idx_xsat.find(chain_state.migrating_hash);
+        if (itr_xsat != endorsement_idx_xsat.end()) {
+            chain_state.num_provider_validators = std::max(endorsement_itr->provider_validators.size(), 
+                                                         itr_xsat->provider_validators.size());
+        } else {
+            chain_state.num_provider_validators = endorsement_itr->provider_validators.size();
+        }
+    } else {
+        chain_state.num_provider_validators = endorsement_itr->provider_validators.size();
+    }
+
 
     auto consensus_block_itr = _consensus_block.find(consensus_block.bucket_id);
     _consensus_block.modify(consensus_block_itr, same_payer, [&](auto& row) {

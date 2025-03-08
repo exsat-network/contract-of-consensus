@@ -946,7 +946,8 @@ class [[eosio::contract("utxomng.xsat")]] utxo_manage : public contract {
 
     utxo_row save_utxo(const checksum256 &txid, const uint32_t index, const std::vector<uint8_t> &script_data,
                        const uint64_t value);
-
+                       
+    bool is_endorsement_consensus_reached(const uint64_t height, const checksum256& hash);
 #ifdef DEBUG
     template <typename T>
     void clear_table(T &table, uint64_t rows_to_clear);

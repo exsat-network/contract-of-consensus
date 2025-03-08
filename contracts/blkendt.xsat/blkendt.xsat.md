@@ -15,6 +15,15 @@ $ cleos push action blkendt.xsat erase '{"height": 840000}' -p utxomng.xsat
 
 # endorse @validator
 $ cleos push action blkendt.xsat endorse '{"validator": "alice", "height": 840000, "hash": "0000000000000000000320283a032748cef8227873ff4872689bf23f1cda83a5"}' -p alice
+
+# setqualify @auth get_self()
+$ cleos push action blkendt.xsat setqualify '{"min_xsat_qualification": "2100.00000000 XSAT", "min_btc_qualification": "100.00000000 BTC"}' -p blkendt.xsat
+
+# setconheight @auth get_self()
+$ cleos push action blkendt.xsat setconheight '{"xsat_stake_activation_height": 890000, "xsat_reward_height": 890000}' -p blkendt.xsat  
+
+# revote @auth synchronizer
+$ cleos push action blkendt.xsat revote '{"synchronizer": "synchronizer", "height": 840000}' -p synchronizer
 ```
 
 ## Table Information
@@ -99,7 +108,11 @@ $ cleos get table blkendt.xsat <height> endorsements --index 2 --key-type sha256
   "limit_num_endorsed_blocks": 10,
   "min_validators": 15,
   "consensus_interval_seconds": 480,
-  "xsat_stake_activation_height": 860000
+  "xsat_stake_activation_height": 860000,
+  "min_xsat_qualification": "2100.00000000 XSAT",
+  "min_btc_qualification": "100.00000000 BTC",
+  "xsat_reward_height": 890000,
+  "validator_active_vote_count": 0
 }
 ```
 

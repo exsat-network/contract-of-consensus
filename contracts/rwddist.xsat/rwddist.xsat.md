@@ -12,6 +12,12 @@ $ cleos push action rwddist.xsat distribute '{"height": 840000}' -p utxomng.xsat
 
 # endtreward @utxomng.xsat
 $ cleos push action rwddist.xsat endtreward '{"height": 840000, "from_index": 0, "to_index": 10}' -p utxomng.xsat
+
+# endtreward2 @utxomng.xsat - XSAT
+$ cleos push action rwddist.xsat endtreward2 '{"height": 840000, "from_index": 0, "to_index": 10}' -p utxomng.xsat
+
+# setrwdconfig @auth get_self()
+$ cleos push action rwddist.xsat setrwdconfig '{"v1": {"miner_reward_rate": 1000, "synchronizer_reward_rate": 1000, "btc_consensus_reward_rate": 1000, "xsat_consensus_reward_rate": 1000, "xsat_staking_reward_rate": 1000}, "v2": {"miner_reward_rate": 2000, "synchronizer_reward_rate": 500, "btc_consensus_reward_rate": 0, "xsat_consensus_reward_rate": 500}}' -p rwddist.xsat
 ```
 
 ## Table Information

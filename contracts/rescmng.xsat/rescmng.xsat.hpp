@@ -131,6 +131,41 @@ class [[eosio::contract("rescmng.xsat")]] resource_management : public contract 
     typedef eosio::multi_index<"heartbeats"_n, heartbeat_row> heartbeat_table;
 
     /**
+     * ## TABLE `feestats`
+     * 
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint64_t} height` - block height
+     * - `{asset} blkent_fee` - fee from blkent.xsat contract
+     * - `{asset} blksync_fee` - fee from blksync.xsat contract 
+     * - `{asset} utxomng_fee` - fee from utxomng.xsat contract
+     * - `{asset} total_fee` - total fee amount
+     *
+     * ### example
+     *
+     * ```json
+     * {
+     *   "height": 840000,
+     *   "blkent_fee": "0.00000100 BTC",
+     *   "blksync_fee": "0.00000200 BTC", 
+     *   "utxomng_fee": "0.00000300 BTC",
+     *   "total_fee": "0.00000600 BTC"
+     * }
+     * ```
+     */
+    struct [[eosio::table]] feestat_row {
+        uint64_t height;
+        asset blkent_fee;
+        asset blksync_fee; 
+        asset utxomng_fee;
+        asset total_fee;
+
+        uint64_t primary_key() const { return height; }
+    };
+    typedef eosio::multi_index<"feestats"_n, feestat_row> feestat_table;
+
+    /**
      * ## ACTION `checkclient`
      *
      * - **authority**: `anyone`
@@ -285,6 +320,7 @@ class [[eosio::contract("rescmng.xsat")]] resource_management : public contract 
     account_table _account = account_table(_self, _self.value);
     config_table _config = config_table(_self, _self.value);
     heartbeat_table _heartbeat = heartbeat_table(_self, _self.value);
+    feestat_table _feestat = feestat_table(_self, _self.value);
 
     // private method
     void do_deposit(const name& from, const name& contract, const asset& quantity, const string& memo);

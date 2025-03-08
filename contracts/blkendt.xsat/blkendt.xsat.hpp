@@ -4,6 +4,7 @@
 #include <eosio/eosio.hpp>
 #include <eosio/singleton.hpp>
 #include <eosio/crypto.hpp>
+#include <eosio/binary_extension.hpp>
 #include "../internal/defines.hpp"
 #include "../internal/utils.hpp"
 
@@ -36,7 +37,10 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
      *   "min_validators": 15,
      *   "consensus_interval_seconds": 480,
      *   "xsat_stake_activation_height": 860000,
-     *   "min_xsat_qualification": "21000.00000000 XSAT"
+     *   "min_xsat_qualification": "21000.00000000 XSAT",
+
+     *   "min_btc_qualification": "100.00000000 BTC",
+     *   "validator_active_vote_count": 2
      * }
      * ```
      */
@@ -47,6 +51,26 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
         uint16_t consensus_interval_seconds;
         uint64_t xsat_stake_activation_height;
         asset min_xsat_qualification;
+
+        binary_extension<asset> min_btc_qualification;
+        binary_extension<uint64_t> xsat_reward_height;
+        binary_extension<uint8_t> validator_active_vote_count;
+
+        bool is_xsat_consensus_active(const uint64_t height) const {
+            return height >= xsat_stake_activation_height;
+        }
+        
+        bool is_xsat_reward_active(const uint64_t height) const {
+            return xsat_reward_height.has_value() && xsat_reward_height.value() > START_HEIGHT && xsat_reward_height.value() <= height;
+        }
+
+        asset get_btc_base_stake() const {
+            return min_btc_qualification.has_value() && min_btc_qualification.value().amount > 0 ? min_btc_qualification.value() : asset(MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL);
+        }
+
+        uint8_t get_validator_active_vote_count() const {
+            return validator_active_vote_count.has_value() ? validator_active_vote_count.value() : 0;
+        }
     };
     typedef eosio::singleton<"config"_n, config_row> config_table;
 
@@ -145,6 +169,50 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
         "endorsements"_n, endorsement_row,
         eosio::indexed_by<"byhash"_n, const_mem_fun<endorsement_row, checksum256, &endorsement_row::by_hash>>>
         endorsement_table;
+        
+    /**
+     * ## TABLE `revote_record`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint64_t} id` - primary key
+     * - `{uint64_t} height` - height
+     * - `{std::vector<name>} synchronizers` - synchronizers
+     * - `{uint8_t} status` - status
+     * - `{time_point_sec} created_at` - created at time
+     * - `{time_point_sec} updated_at` - updated at time
+     *
+     * ### example
+     *
+     * ```json
+     * {
+     *   "id": 0,
+     *   "height": 840000,
+     *   "synchronizers": ["alice", "bob"],
+     *   "status": 0,
+     *   "created_at": "2024-08-13T00:00:00",
+     *   "updated_at": "2024-08-13T00:00:00"
+     * }
+     * ```
+     */
+    struct [[eosio::table]] revote_record {
+        uint64_t           id;
+        uint64_t           height;
+
+        std::vector<name>  synchronizers;
+        uint8_t            status;      // 0: pending, 1: success, 2: failed
+        time_point_sec     created_at;
+        time_point_sec     updated_at;
+
+        uint64_t primary_key() const { return id; }
+        uint64_t by_height()   const { return height; }
+    };
+
+    typedef eosio::multi_index<
+        "revoterecord"_n, revote_record,
+        indexed_by<"byheight"_n, const_mem_fun<revote_record, uint64_t, &revote_record::by_height>>
+    > revote_record_table;
 
     /**
      * ## ACTION `config`
@@ -160,18 +228,19 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
      * - `{uint16_t} min_validators` - the minimum number of validators, which limits the number of validators that pledge more than 100 BTC at the time of first endorsement.
      * - `{uint64_t} xsat_stake_activation_height` - block height at which XSAT staking feature is activated
      * - `{uint16_t} consensus_interval_seconds` - the interval in seconds between consensus rounds.
-     * - `{asset} min_xsat_qualification` - the minimum pledge amount of xast to become a validator 
+     * - `{uint64_t} xsat_reward_height` - block height at which XSAT reward is activated
+     * - `{uint8_t} validator_active_vote_count` - the number of validators that are active in the current consensus
      *
      * ### example
      *
      * ```bash
-     * $ cleos push action blkendt.xsat config '[840003, 10, 15, 860000, 480, "21000.00000000 XSAT"]' -p blkendt.xsat
+     * $ cleos push action blkendt.xsat config '[840003, 10, 15, 860000, 480, 850000, 2]' -p blkendt.xsat
      * ```
      */
     [[eosio::action]]
     void config(const uint64_t limit_endorse_height, const uint16_t limit_num_endorsed_blocks,
-                const uint16_t min_validators, const uint64_t xsat_stake_activation_height,
-                const uint16_t consensus_interval_seconds, const asset& min_xsat_qualification);
+                const uint16_t min_validators, const uint16_t consensus_interval_seconds, 
+                const uint8_t validator_active_vote_count);
 
     /**
      * ## ACTION `endorse`
@@ -220,11 +289,77 @@ class [[eosio::contract("blkendt.xsat")]] block_endorse : public contract {
     void cleartable(const name table_name, const optional<uint64_t> scope, const optional<uint64_t> max_rows);
 #endif
 
+    /**
+     * ## ACTION `revote`
+     *
+     * - **authority**: `synchronizer`
+     *
+     * > To initiate a revote for a specific height
+     *
+     * ### params
+     *
+     * - `{name} synchronizer` - synchronizer account
+     * - `{uint64_t} height` - height
+     *
+     * ### example  
+     *
+     * ```bash
+     * $ cleos push action blkendt.xsat revote '["alice", 840000]' -p alice
+     * ```
+     */
+    [[eosio::action]]
+    void revote(const name& synchronizer, const uint64_t height);
+
+    /**
+     * ## ACTION `setqualify`
+     *
+     * - **authority**: `endrmng.xsat` or `get_self()`
+     *
+     * > Set the minimum pledge amount of xast to become a validator
+     *
+     * ### params
+     *
+     * - `{asset} min_xsat_qualification` - the minimum pledge amount of xast to become a validator
+     * - `{asset} min_btc_qualification` - the minimum pledge amount of btc to become a validator
+     *
+     * ### example
+     *
+     * ```bash
+     * $ cleos push action blkendt.xsat setqualify '["21000.00000000 XSAT", "100.00000000 BTC"]' -p endrmng.xsat
+     * ```
+     */
+    [[eosio::action]]
+    void setqualify(const asset& min_xsat_qualification, const asset& min_btc_qualification);
+
+    /**
+     * ## ACTION `setconheight`
+     *
+     * - **authority**: `get_self()`
+     *
+     * > Set the XSAT stake activation height and XSAT reward height
+     *
+     * ### params
+     *
+     * - `{uint64_t} xsat_stake_activation_height` - block height at which XSAT staking feature is activated
+     * - `{uint64_t} xsat_reward_height` - block height at which XSAT reward feature is activated
+     *
+     * ### example
+     *
+     * ```bash
+     * $ cleos push action blkendt.xsat setconheight '[860000, 870000]' -p blkendt.xsat
+     * ```
+     */
+    [[eosio::action]]
+    void setconheight(const uint64_t xsat_stake_activation_height, const uint64_t xsat_reward_height);
+
     using erase_action = eosio::action_wrapper<"erase"_n, &block_endorse::erase>;
+    using setqualify_action = eosio::action_wrapper<"setqualify"_n, &block_endorse::setqualify>;
 
    private:
-    std::vector<requested_validator_info> get_valid_validator_by_btc_stake();
-    std::vector<requested_validator_info> get_valid_validator_by_xsat_stake(const uint64_t min_xsat_qualification);
+    std::vector<requested_validator_info> get_valid_validator_by_btc_stake(const uint64_t height, const uint8_t consecutive_vote_count);
+    std::vector<requested_validator_info> get_valid_validator_by_xsat_stake(const uint64_t height, const uint8_t consecutive_vote_count);
+    void process_revote_consensus(const uint64_t height);
+    void migrate_endorsements(const uint64_t src_scope);
 
 #ifdef DEBUG
     template <typename T>

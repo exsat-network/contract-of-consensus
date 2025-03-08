@@ -16,9 +16,10 @@ void reward_distribution::cleartable(const name table_name, const optional<name>
     reward_balance_table _reward_balance(get_self(), value);
 
     // tables
-    if (table_name == "rewardlogs"_n)
-        clear_table(_reward_log, rows_to_clear);
-    else if (table_name == "rewardbal"_n)
+    if (table_name == "rewardlogs"_n) 
+        clear_table(_btc_reward_log, rows_to_clear);
+        // clear_table(_xsat_reward_log, rows_to_clear);
+     else if (table_name == "rewardbal"_n) 
         _reward_balance.remove();
     else
         check(false, "rwddist.xsat::cleartable: [table_name] unknown table to clear");
