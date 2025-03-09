@@ -1468,7 +1468,10 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
             if (is_btc_validator) {
                 row.qualification = qualification;
             }else{
+                // xsat validator's reward address equal stake address
                 row.xsat_quantity = qualification;
+                row.memo = "0x" + xsat::utils::checksum160_to_string(stake_addr);
+                row.reward_address = stake_addr;
             }
         });
         return;
@@ -1481,7 +1484,10 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
     if (is_btc_validator) {
         new_validator.qualification = qualification;
     }else{
+        // xsat validator's reward address equal stake address
         new_validator.xsat_quantity = qualification;
+        new_validator.memo = "0x" + xsat::utils::checksum160_to_string(stake_addr);
+        new_validator.reward_address = stake_addr;
     }
 
     _validator.erase(validator_itr);
