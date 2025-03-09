@@ -1447,7 +1447,7 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
         qualification = get_qualification(*validator_itr, is_btc_validator, stake_addr);
     }
 
-    block_endorse::config_table _config(BLOCK_SYNC_CONTRACT, BLOCK_SYNC_CONTRACT.value);
+    block_endorse::config_table _config(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
     auto config = _config.get_or_default();
 
     auto active = 0;
@@ -1600,7 +1600,7 @@ void endorse_manage::setstakebase(const asset& xsat_base_stake, const asset& btc
 void endorse_manage::updcreditstk(const bool is_close) {
     require_auth(get_self());
 
-    block_endorse::config_table _blkconfig(BLOCK_SYNC_CONTRACT, BLOCK_SYNC_CONTRACT.value);
+    block_endorse::config_table _blkconfig(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
     auto blkconfig = _blkconfig.get_or_default();
     auto config = _config.get_or_default();
 
