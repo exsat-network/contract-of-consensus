@@ -242,7 +242,9 @@ void block_sync::delchunk(const name& synchronizer, const uint64_t height, const
 //@auth synchronizer
 [[eosio::action]]
 void block_sync::delbucket(const name& synchronizer, const uint64_t height, const checksum256& hash) {
-    require_auth(synchronizer);
+    if (!has_auth(get_self())) {
+        require_auth(synchronizer);
+    }
 
     // check
     block_bucket_table _block_bucket = block_bucket_table(get_self(), synchronizer.value);
@@ -254,6 +256,7 @@ void block_sync::delbucket(const name& synchronizer, const uint64_t height, cons
     resource_management::pay_action pay(RESOURCE_MANAGE_CONTRACT, {get_self(), "active"_n});
     pay.send(height, hash, synchronizer, PUSH_CHUNK, 1);
 
+    auto block_hash = block_bucket_itr->hash;
     auto bucket_id = block_bucket_itr->bucket_id;
 
     // erase block.chunk
@@ -270,10 +273,15 @@ void block_sync::delbucket(const name& synchronizer, const uint64_t height, cons
 
     // erase passed index
     passed_index_table _passed_index(get_self(), height);
-    auto passed_index_idx = _passed_index.get_index<"bybucketid"_n>();
-    auto passed_index_itr = passed_index_idx.find(bucket_id);
-    if (passed_index_itr != passed_index_idx.end()) {
-        passed_index_idx.erase(passed_index_itr);
+    auto passed_index_idx = _passed_index.get_index<"byhash"_n>();
+    auto passed_index_itr = passed_index_idx.lower_bound(block_hash);
+    auto passed_index_end = passed_index_idx.upper_bound(block_hash);
+    while (passed_index_itr != passed_index_end) {
+        if (passed_index_itr->synchronizer == synchronizer) {
+            passed_index_itr = passed_index_idx.erase(passed_index_itr);
+        } else {
+            passed_index_itr++;
+        }
     }
 
     // log
