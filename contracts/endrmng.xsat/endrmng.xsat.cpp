@@ -1474,6 +1474,10 @@ void endorse_manage::evmsetstaker(const name& validator, const checksum160& stak
                 row.reward_address = stake_addr;
             }
         });
+        
+        // send log 
+        endorse_manage::setstakerlog_action _setstakerlog(get_self(), {get_self(), "active"_n});
+        _setstakerlog.send(validator, stake_addr);
         return;
     }
 
