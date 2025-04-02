@@ -397,7 +397,7 @@ void block_endorse::revote(const name& synchronizer, const uint64_t height) {
 
     // use lower_bound and upper_bound to find pending record
     auto lb = height_index.lower_bound(height);
-    auto ub = height_index.upper_bound(height+1);
+    auto ub = height_index.upper_bound(height);
     auto pending_itr = std::find_if(lb, ub, [](const auto& rec) {
         return rec.status == 0;
     });
