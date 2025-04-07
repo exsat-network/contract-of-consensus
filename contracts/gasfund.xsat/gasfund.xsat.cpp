@@ -491,7 +491,6 @@ gasfund::calculate_xsat_validator_rewards(const reward_distribution::reward_log_
 
 [[eosio::on_notify("*::transfer")]]
 void gasfund::on_transfer(const name& from, const name& to, const asset& quantity, const string& memo) {
-    require_auth(get_self());
     if (to != get_self())
         return;
 
