@@ -1,6 +1,6 @@
 #include "gasfund.xsat.hpp"
-#include <eosio/system.hpp>
 #include <btc.xsat/btc.xsat.hpp>
+#include <eosio/system.hpp>
 #include <rescmng.xsat/rescmng.xsat.hpp>
 #include <utxomng.xsat/utxomng.xsat.hpp>
 #include "../internal/defines.hpp"
@@ -55,7 +55,7 @@ void gasfund::evmclaim(const name& caller, const checksum160& proxy_address, con
     auto claim_result = receiver_claim(receiver, receiver_type);
     print("claim_result: ", claim_result);
     gasfund::evmclaimlog_action _evmclaimlog(get_self(), {get_self(), "active"_n});
-    _evmclaimlog.send(caller,proxy_address, sender, receiver, receiver_type, claim_result);
+    _evmclaimlog.send(caller, proxy_address, sender, receiver, receiver_type, claim_result);
 }
 
 asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type) {
@@ -141,7 +141,8 @@ void gasfund::distribute() {
         // Ensure consensus_fees doesn't underflow
         uint64_t fee_sum = safemath::add(enf_fees, rams_fees);
         uint64_t consensus_fees = (fee_sum <= fees) ? (fees - fee_sum) : 0;
-        print("height: ", height, " fees: ", fees, " enf_fees: ", enf_fees, " rams_fees: ", rams_fees, " consensus_fees: ", consensus_fees, "---");
+        print("height: ", height, " fees: ", fees, " enf_fees: ", enf_fees, " rams_fees: ", rams_fees,
+              " consensus_fees: ", consensus_fees, "---");
 
         total_fees = safemath::add(total_fees, fees);
         total_enf_fees = safemath::add(total_enf_fees, enf_fees);
@@ -199,7 +200,6 @@ void gasfund::distribute() {
         if (reward == 0)
             continue; // Skip zero rewards
 
-        // 创建临时变量复制当前循环的值
         name current_validator = validator;
         uint64_t current_reward = reward;
 
@@ -212,7 +212,6 @@ void gasfund::distribute() {
                 row.reward = asset(current_reward, XSAT_SYMBOL);
             });
         } else {
-            // 先找到主索引中的迭代器
             auto primary_itr = _distribute_details.find(existing_record->id);
             _distribute_details.modify(
                 primary_itr, get_self(), [&, current_reward](auto& row) { row.reward.amount += current_reward; });
@@ -224,7 +223,6 @@ void gasfund::distribute() {
         if (reward == 0)
             continue; // Skip zero rewards
 
-        // 创建临时变量复制当前循环的值
         name current_synchronizer = synchronizer;
         uint64_t current_reward = reward;
 
@@ -239,7 +237,6 @@ void gasfund::distribute() {
                 row.reward = asset(current_reward, XSAT_SYMBOL);
             });
         } else {
-            // 先找到主索引中的迭代器
             auto primary_itr = _distribute_details.find(existing_record->id);
             // synchronizer has validator record, update existing record
             _distribute_details.modify(
@@ -256,7 +253,6 @@ void gasfund::distribute() {
         if (reward == 0 || total_rewards == 0)
             continue;
 
-        // 创建临时变量复制当前循环的值
         name current_receiver = receiver;
         uint64_t current_reward = reward;
 
@@ -277,7 +273,6 @@ void gasfund::distribute() {
                 row.last_claim_time = time_point_sec(); // Empty time point
             });
         } else {
-            // 先找到主索引中的迭代器
             auto primary_itr = _consensus_fees.find(_consensus_fees_itr->id);
             _consensus_fees.modify(primary_itr, get_self(), [&, consensus_fees](auto& row) {
                 row.unclaimed.amount = safemath::add(row.unclaimed.amount, consensus_fees);
@@ -324,7 +319,6 @@ void gasfund::distribute() {
                     row.last_claim_time = time_point_sec(); // Empty time point
                 });
             } else {
-                // 先找到主索引中的迭代器
                 auto primary_itr = _consensus_fees.find(_consensus_fees_itr->id);
                 _consensus_fees.modify(
                     primary_itr, get_self(), [&, consensus_fees](auto& row) { row.unclaimed.amount += consensus_fees; });
@@ -344,16 +338,14 @@ void gasfund::distribute() {
 
     // send log
     gasfund::distributlog_action _distributlog(get_self(), {get_self(), "active"_n});
-    _distributlog.send(distribute_row{
-        .start_height = start_height,
-        .end_height = end_height,
-        .total_fees = asset(total_fees, BTC_SYMBOL),
-        .enf_fees = asset(total_enf_fees, BTC_SYMBOL),
-        .rams_fees = asset(total_rams_fees, BTC_SYMBOL),
-        .consensus_fees = asset(total_consensus_fees, BTC_SYMBOL),
-        .total_xsat_rewards = asset(total_rewards, XSAT_SYMBOL),
-        .distribute_time = current_time_point()
-    });
+    _distributlog.send(distribute_row{.start_height = start_height,
+                                      .end_height = end_height,
+                                      .total_fees = asset(total_fees, BTC_SYMBOL),
+                                      .enf_fees = asset(total_enf_fees, BTC_SYMBOL),
+                                      .rams_fees = asset(total_rams_fees, BTC_SYMBOL),
+                                      .consensus_fees = asset(total_consensus_fees, BTC_SYMBOL),
+                                      .total_xsat_rewards = asset(total_rewards, XSAT_SYMBOL),
+                                      .distribute_time = current_time_point()});
 }
 
 gasfund::reward_calculation_result gasfund::calculate_reward(uint64_t height) {
@@ -491,6 +483,7 @@ gasfund::calculate_xsat_validator_rewards(const reward_distribution::reward_log_
 
 [[eosio::on_notify("*::transfer")]]
 void gasfund::on_transfer(const name& from, const name& to, const asset& quantity, const string& memo) {
+    require_auth(get_self());
     if (to != get_self())
         return;
 
@@ -509,21 +502,19 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
         return;
     }
     auto config = _config.get_or_default();
-    auto _fee_stat = _fees_stat.get_or_default();
+    auto _feestat = _fees_stat.get_or_default();
 
     // chain state
-    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
-    auto chain_state = _chain_state.get();
-    check(chain_state.irreversible_height > _fee_stat.last_evm_height,
+    check(_feestat.last_height > _feestat.last_evm_height,
           "gasfund.xsat::handle_evm_fees_transfer: current height is less than last evm height");
 
-    auto start_height = _fee_stat.last_evm_height;
-    auto end_height = chain_state.irreversible_height;
+    auto start_height = _feestat.last_evm_height;
+    auto end_height = _feestat.last_height;
 
     // read distribute
     auto _distribute_itr = _distributes.find(start_height);
-    check(_distribute_itr != _distributes.end(), "gasfund.xsat::handle_evm_fees_transfer: distribute record not found for height "
-                                                     + std::to_string(_fee_stat.last_evm_height));
+    check(_distribute_itr != _distributes.end(),
+          "gasfund.xsat::handle_evm_fees_transfer: distribute record not found for height " + std::to_string(start_height));
 
     // read distribute details
     distribute_detail_table _distribute_details(get_self(), start_height);
@@ -533,21 +524,28 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
         "gasfund.xsat::handle_evm_fees_transfer: distribute details record not found for height " + std::to_string(start_height));
 
     auto total_rewards = _distribute_itr->total_xsat_rewards;
-    auto total_fees = quantity;
-    auto remaining_fees = total_fees;
 
-    // 找到最后一个接收者，需要遍历获取
+    // Prevent overflow in fee calculations
+    auto enf_fees = safe_pct(quantity.amount, config.enf_reward_rate, RATE_BASE_10000);
+    auto rams_fees = safe_pct(quantity.amount, config.rams_reward_rate, RATE_BASE_10000);
+
+    // Ensure consensus_fees doesn't underflow
+    uint64_t fee_sum = safemath::add(enf_fees, rams_fees);
+
+    uint64_t total_consensus_fees = (fee_sum <= quantity.amount) ? (quantity.amount - fee_sum) : 0;
+    uint64_t remaining_fees = total_consensus_fees;
+
     name last_receiver;
     for (auto itr = _distribute_details.begin(); itr != _distribute_details.end(); ++itr) {
         last_receiver = itr->receiver;
     }
 
     for (auto itr = _distribute_details.begin(); itr != _distribute_details.end(); itr++) {
-        auto _fees = safe_pct(total_fees.amount, itr->reward.amount, total_rewards.amount);
+        auto _fees = safe_pct(total_consensus_fees, itr->reward.amount, total_rewards.amount);
         if (itr->receiver == last_receiver) {
-            _fees = remaining_fees.amount;
+            _fees = remaining_fees;
         }
-        remaining_fees = asset(safemath::sub(remaining_fees.amount, _fees), remaining_fees.symbol);
+        remaining_fees = safemath::sub(remaining_fees, _fees);
 
         auto _consensus_fees_itr = _consensus_fees.find(itr->get_receiver_id());
         if (_consensus_fees_itr == _consensus_fees.end()) {
@@ -563,6 +561,19 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
                 _consensus_fees_itr, get_self(), [&](auto& row) { row.unclaimed += asset(_fees, BTC_SYMBOL); });
         }
     }
+
+    // Update fees statistics
+    _feestat.last_evm_height = end_height;
+    _feestat.enf_unclaimed = asset(safemath::add(_feestat.enf_unclaimed.amount, enf_fees), BTC_SYMBOL);
+    _feestat.rams_unclaimed = asset(safemath::add(_feestat.rams_unclaimed.amount, rams_fees), BTC_SYMBOL);
+    _feestat.consensus_unclaimed = asset(safemath::add(_feestat.consensus_unclaimed.amount, total_consensus_fees), BTC_SYMBOL);
+
+    _feestat.total_consensus_fees = asset(safemath::add(_feestat.total_consensus_fees.amount, total_consensus_fees), BTC_SYMBOL);
+    _feestat.total_rams_fees = asset(safemath::add(_feestat.total_rams_fees.amount, rams_fees), BTC_SYMBOL);
+    _feestat.total_enf_fees = asset(safemath::add(_feestat.total_enf_fees.amount, enf_fees), BTC_SYMBOL);
+
+    _feestat.total_evm_gas_fees = asset(safemath::add(_feestat.total_evm_gas_fees.amount, quantity.amount), BTC_SYMBOL);
+    _fees_stat.set(_feestat, get_self());
 }
 
 [[eosio::action]]
