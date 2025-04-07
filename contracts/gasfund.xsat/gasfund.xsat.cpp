@@ -543,8 +543,10 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
         auto _fees = safe_pct(total_consensus_fees, itr->reward.amount, total_rewards.amount);
         if (itr->receiver == last_receiver) {
             _fees = remaining_fees;
+        } else {
+            _fees = _fees <= remaining_fees ? _fees : remaining_fees;
+            remaining_fees = safemath::sub(remaining_fees, _fees);
         }
-        remaining_fees = safemath::sub(remaining_fees, _fees);
 
         auto _consensus_fees_itr = _consensus_fees.find(itr->get_receiver_id());
         if (_consensus_fees_itr == _consensus_fees.end()) {
