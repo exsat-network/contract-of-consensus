@@ -36,7 +36,8 @@ void gasfund::claim(const name& receiver, const uint8_t receiver_type) {
     require_auth(receiver);
 
     // send log
-    claimlog(receiver, receiver_type, receiver_claim(receiver, receiver_type));
+    gasfund::claimlog_action _claimlog(get_self(), {get_self(), "active"_n});
+    _claimlog.send(receiver, receiver_type, receiver_claim(receiver, receiver_type));
 }
 
 // receiver_type: 0 for validator, 1 for synchronizer
@@ -50,7 +51,11 @@ void gasfund::evmclaim(const name& caller, const checksum160& proxy_address, con
     check(proxy_address == config.evm_proxy_address, "gasfund.xsat::evmclaim: invalid proxy address");
 
     // send log
-    evmclaimlog(caller, proxy_address, sender, receiver, receiver_type, receiver_claim(receiver, receiver_type));
+    print("evmclaim: ", caller, " ", proxy_address, " ", sender, " ", receiver, " ", receiver_type);
+    auto claim_result = receiver_claim(receiver, receiver_type);
+    print("claim_result: ", claim_result);
+    gasfund::evmclaimlog_action _evmclaimlog(get_self(), {get_self(), "active"_n});
+    _evmclaimlog.send(caller,proxy_address, sender, receiver, receiver_type, claim_result);
 }
 
 asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type) {
@@ -337,15 +342,18 @@ void gasfund::distribute() {
     _feestat.total_rams_fees = asset(safemath::add(_feestat.total_rams_fees.amount, total_rams_fees), BTC_SYMBOL);
     _fees_stat.set(_feestat, get_self());
 
-    // Log successful distribution
-    distributlog({.start_height = start_height,
-                  .end_height = end_height,
-                  .total_fees = asset(total_fees, BTC_SYMBOL),
-                  .enf_fees = asset(total_enf_fees, BTC_SYMBOL),
-                  .rams_fees = asset(total_rams_fees, BTC_SYMBOL),
-                  .consensus_fees = asset(total_consensus_fees, BTC_SYMBOL),
-                  .total_xsat_rewards = asset(total_rewards, XSAT_SYMBOL),
-                  .distribute_time = current_time_point()});
+    // send log
+    gasfund::distributlog_action _distributlog(get_self(), {get_self(), "active"_n});
+    _distributlog.send(distribute_row{
+        .start_height = start_height,
+        .end_height = end_height,
+        .total_fees = asset(total_fees, BTC_SYMBOL),
+        .enf_fees = asset(total_enf_fees, BTC_SYMBOL),
+        .rams_fees = asset(total_rams_fees, BTC_SYMBOL),
+        .consensus_fees = asset(total_consensus_fees, BTC_SYMBOL),
+        .total_xsat_rewards = asset(total_rewards, XSAT_SYMBOL),
+        .distribute_time = current_time_point()
+    });
 }
 
 gasfund::reward_calculation_result gasfund::calculate_reward(uint64_t height) {
@@ -576,8 +584,10 @@ void gasfund::evmenfclaim(const name& caller, const checksum160& proxy_address, 
     auto unclaimed = _feestat.enf_unclaimed;
     _feestat.enf_unclaimed = asset(0, BTC_SYMBOL);
     _fees_stat.set(_feestat, get_self());
-    // 发送日志
-    evmenfclog(caller, proxy_address, sender, unclaimed);
+
+    // send log
+    gasfund::evmenfclog_action _evmenfclog(get_self(), {get_self(), "active"_n});
+    _evmenfclog.send(caller, proxy_address, sender, unclaimed);
 }
 
 [[eosio::action]]
@@ -598,9 +608,10 @@ void gasfund::evmramsclaim(const name& caller, const checksum160& proxy_address,
     _feestat.rams_unclaimed = asset(0, BTC_SYMBOL);
     _fees_stat.set(_feestat, get_self());
 
-    evmramsclog(caller, proxy_address, sender, unclaimed);
+    // send log
+    gasfund::evmramsclog_action _evmramsclog(get_self(), {get_self(), "active"_n});
+    _evmramsclog.send(caller, proxy_address, sender, unclaimed);
 }
-
 
 void gasfund::token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo) {
     btc::transfer_action transfer(value.contract, {from, "active"_n});

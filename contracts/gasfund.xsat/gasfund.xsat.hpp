@@ -256,6 +256,14 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
     using evmenfclaim_action = eosio::action_wrapper<"evmenfclaim"_n, &gasfund::evmenfclaim>;
     using evmramsclaim_action = eosio::action_wrapper<"evmramsclaim"_n, &gasfund::evmramsclaim>;
 
+    // log action
+    using configlog_action = eosio::action_wrapper<"configlog"_n, &gasfund::configlog>;
+    using distributlog_action = eosio::action_wrapper<"distributlog"_n, &gasfund::distributlog>;
+    using claimlog_action = eosio::action_wrapper<"claimlog"_n, &gasfund::claimlog>;
+    using evmclaimlog_action = eosio::action_wrapper<"evmclaimlog"_n, &gasfund::evmclaimlog>;
+    using evmenfclog_action = eosio::action_wrapper<"evmenfclog"_n, &gasfund::evmenfclog>;
+    using evmramsclog_action = eosio::action_wrapper<"evmramsclog"_n, &gasfund::evmramsclog>;
+
     void handle_evm_fees_transfer(const name& from, const name& to, const asset& quantity, const string& memo);
     asset receiver_claim(const name& receiver, const uint8_t receiver_type);
 
