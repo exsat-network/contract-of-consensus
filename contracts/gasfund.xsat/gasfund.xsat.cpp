@@ -685,7 +685,7 @@ void gasfund::token_transfer(const name& from, const string& to, const extended_
     if (is_eos_account) {
         transfer.send(from, name(to), value.quantity, "");
     } else {
-        transfer.send(from, ERC20_CONTRACT, value.quantity, to);
+        transfer.send(from, EVM_CONTRACT, value.quantity, to);
     }
 }
 
