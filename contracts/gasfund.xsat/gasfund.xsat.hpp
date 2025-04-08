@@ -1,11 +1,11 @@
 #pragma once
 
+#include "../internal/defines.hpp"
 #include <eosio/asset.hpp>
 #include <eosio/eosio.hpp>
 #include <eosio/singleton.hpp>
 #include <eosio/system.hpp>
 #include <rwddist.xsat/rwddist.xsat.hpp>
-#include "../internal/defines.hpp"
 
 using namespace eosio;
 using namespace std;
@@ -13,11 +13,11 @@ using namespace std;
 /**
  * @brief GasFund Contract
  *
- * This contract is responsible for calculating and distributing rewards on the blockchain,
- * including regular block rewards and EVM gas fee rewards
+ * This contract is responsible for calculating and distributing rewards on the
+ * blockchain, including regular block rewards and EVM gas fee rewards
  */
 class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
-  public:
+public:
     using contract::contract;
 
     // CONSTANTS
@@ -37,13 +37,14 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
         name evm_fees_account = "evmutil.xsat"_n;
 
         checksum160 evm_proxy_address;
-        checksum160 enf_reward_address;
-        checksum160 rams_reward_address;
+        string enf_reward_address;
+        string rams_reward_address;
     };
     typedef eosio::singleton<"config"_n, config_row> config_table;
 
     /**
-     * @brief Reward distribution record structure, storing details of the last reward calculation
+     * @brief Reward distribution record structure, storing details of the last
+     * reward calculation
      */
     struct [[eosio::table]] fees_stat_row {
         uint64_t last_height;     // Last block height for reward calculation
@@ -73,7 +74,8 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
         time_point_sec last_claim_time; // Last claim time
 
         uint64_t get_receiver_id() const {
-            return receiver_type == "validator"_n ? receiver.value : receiver.value | XSAT_SCOPE_MASK;
+            return receiver_type == "validator"_n ? receiver.value
+                                                  : receiver.value | XSAT_SCOPE_MASK;
         }
         uint64_t primary_key() const {
             return id;
@@ -84,7 +86,8 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
     };
     typedef eosio::multi_index<
         "consensusfee"_n, consensus_fee_row,
-        indexed_by<"byreceiver"_n, const_mem_fun<consensus_fee_row, uint64_t, &consensus_fee_row::by_receiver>>>
+        indexed_by<"byreceiver"_n,
+                   const_mem_fun<consensus_fee_row, uint64_t, &consensus_fee_row::by_receiver>>>
         consensus_fees_table;
 
     /**
@@ -113,7 +116,8 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
      * @brief Gas fee distribution record
      *
      * Stores the distribution details of gas fees for each receiver
-     * Uses start_height as scope to track distributions between height calculations
+     * Uses start_height as scope to track distributions between height
+     * calculations
      */
     struct [[eosio::table]] distribute_detail_row {
         uint64_t id;
@@ -122,7 +126,8 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
         asset reward;       // Distributed reward amount
 
         uint64_t get_receiver_id() const {
-            return receiver_type == "validator"_n ? receiver.value : receiver.value | XSAT_SCOPE_MASK;
+            return receiver_type == "validator"_n ? receiver.value
+                                                  : receiver.value | XSAT_SCOPE_MASK;
         }
         uint64_t primary_key() const {
             return id;
@@ -133,7 +138,8 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
     };
     typedef eosio::multi_index<
         "distdetails"_n, distribute_detail_row,
-        indexed_by<"byreceiver"_n, const_mem_fun<distribute_detail_row, uint64_t, &distribute_detail_row::by_receiver>>>
+        indexed_by<"byreceiver"_n, const_mem_fun<distribute_detail_row, uint64_t,
+                                                 &distribute_detail_row::by_receiver>>>
         distribute_detail_table;
 
     /**
@@ -153,14 +159,22 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
     void claim(const name& receiver, const uint8_t receiver_type);
 
     [[eosio::action]]
-    void evmclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender, const name& receiver,
-                  const uint8_t receiver_type);
+    void enfclaim();
 
     [[eosio::action]]
-    void evmenfclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender);
+    void ramsclaim();
 
     [[eosio::action]]
-    void evmramsclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender);
+    void evmclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender,
+                  const name& receiver, const uint8_t receiver_type);
+
+    [[eosio::action]]
+    void evmenfclaim(const name& caller, const checksum160& proxy_address,
+                     const checksum160& sender);
+
+    [[eosio::action]]
+    void evmramsclaim(const name& caller, const checksum160& proxy_address,
+                      const checksum160& sender);
 
     /**
      * @brief Set configuration
@@ -204,23 +218,37 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
     };
 
     [[eosio::action]]
-    void claimlog(const name& receiver, const uint8_t receiver_type, const asset& quantity) {
+    void claimlog(const name& sender, const name& receiver, const uint8_t receiver_type,
+                  const asset& quantity) {
         require_auth(get_self());
     };
 
     [[eosio::action]]
-    void evmclaimlog(const name& caller, const checksum160& proxy_address, const checksum160& sender, const name& receiver,
-                     const uint8_t receiver_type, const asset& quantity) {
+    void enfclaimlog(const name& sender, const string& address, const asset& quantity) {
         require_auth(get_self());
     };
 
     [[eosio::action]]
-    void evmenfclog(const name& caller, const checksum160& proxy_address, const checksum160& sender, const asset& quantity) {
+    void ramsclaimlog(const name& sender, const string& address, const asset& quantity) {
         require_auth(get_self());
     };
 
     [[eosio::action]]
-    void evmramsclog(const name& caller, const checksum160& proxy_address, const checksum160& sender, const asset& quantity) {
+    void evmclaimlog(const name& caller, const checksum160& proxy_address,
+                     const checksum160& sender, const name& receiver, const uint8_t receiver_type,
+                     const asset& quantity) {
+        require_auth(get_self());
+    };
+
+    [[eosio::action]]
+    void evmenfclog(const name& caller, const checksum160& proxy_address, const checksum160& sender,
+                    const asset& quantity) {
+        require_auth(get_self());
+    };
+
+    [[eosio::action]]
+    void evmramsclog(const name& caller, const checksum160& proxy_address,
+                     const checksum160& sender, const asset& quantity) {
         require_auth(get_self());
     };
 
@@ -235,15 +263,18 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
     using configlog_action = eosio::action_wrapper<"configlog"_n, &gasfund::configlog>;
     using distributlog_action = eosio::action_wrapper<"distributlog"_n, &gasfund::distributlog>;
     using claimlog_action = eosio::action_wrapper<"claimlog"_n, &gasfund::claimlog>;
+    using enfclaimlog_action = eosio::action_wrapper<"enfclaimlog"_n, &gasfund::enfclaimlog>;
+    using ramsclaimlog_action = eosio::action_wrapper<"ramsclaimlog"_n, &gasfund::ramsclaimlog>;
     using evmclaimlog_action = eosio::action_wrapper<"evmclaimlog"_n, &gasfund::evmclaimlog>;
     using evmenfclog_action = eosio::action_wrapper<"evmenfclog"_n, &gasfund::evmenfclog>;
     using evmramsclog_action = eosio::action_wrapper<"evmramsclog"_n, &gasfund::evmramsclog>;
 
-  private:
+private:
     /**
      * @brief Fee distribution result structure
      *
-     * Used to accumulate fee distribution results before batch updating the database
+     * Used to accumulate fee distribution results before batch updating the
+     * database
      */
     struct reward_distribution_result {
         name receiver;
@@ -264,21 +295,26 @@ class [[eosio::contract("gasfund.xsat")]] gasfund : public contract {
     distribute_table _distributes = distribute_table(_self, _self.value);
     distribute_table _evm_distributes = distribute_table(_self, EVM_UTIL_CONTRACT.value);
 
-    void handle_evm_fees_transfer(const name& from, const name& to, const asset& quantity, const string& memo);
+    void handle_evm_fees_transfer(const name& from, const name& to, const asset& quantity,
+                                  const string& memo);
     asset receiver_claim(const name& receiver, const uint8_t receiver_type);
 
     // Distribution helper functions - optimized parameter passing for basic types
     reward_calculation_result calculate_reward(uint64_t height);
 
-    vector<reward_distribution_result>
-    calculate_btc_validator_rewards(const reward_distribution::reward_log_table::const_iterator& _reward_log_itr,
-                                    uint64_t staking_reward);
+    vector<reward_distribution_result> calculate_btc_validator_rewards(
+        const reward_distribution::reward_log_table::const_iterator& _reward_log_itr,
+        uint64_t staking_reward);
 
-    vector<reward_distribution_result>
-    calculate_xsat_validator_rewards(const reward_distribution::reward_log_table::const_iterator& _xsat_reward_log_itr,
-                                     uint64_t consensus_reward);
+    vector<reward_distribution_result> calculate_xsat_validator_rewards(
+        const reward_distribution::reward_log_table::const_iterator& _xsat_reward_log_itr,
+        uint64_t consensus_reward);
+
+    asset enfclaim_without_auth(const config_row& config);
+    asset ramsclaim_without_auth(const config_row& config);
 
     uint64_t safe_pct(uint64_t value, uint64_t numerator, uint64_t denominator);
-
-    void token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo);
+    void token_transfer(const name& from, const string& to, const extended_asset& value);
+    void token_transfer(const name& from, const name& to, const extended_asset& value,
+                        const string& memo);
 };

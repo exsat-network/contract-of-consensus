@@ -1,11 +1,11 @@
 #include "gasfund.xsat.hpp"
+#include "../internal/defines.hpp"
+#include "../internal/safemath.hpp"
+#include "../internal/utils.hpp"
 #include <btc.xsat/btc.xsat.hpp>
 #include <eosio/system.hpp>
 #include <rescmng.xsat/rescmng.xsat.hpp>
 #include <utxomng.xsat/utxomng.xsat.hpp>
-#include "../internal/defines.hpp"
-#include "../internal/safemath.hpp"
-#include "../internal/utils.hpp"
 
 /**
  * @brief Safe percentage calculation function to prevent overflow
@@ -28,22 +28,32 @@ uint64_t gasfund::safe_pct(uint64_t value, uint64_t numerator, uint64_t denomina
 [[eosio::action]]
 void gasfund::config(const config_row& config) {
     require_auth(get_self());
+
+    // check config
+    if (config.rams_reward_address.size() <= 12) {
+        check(is_account(name(config.rams_reward_address)),
+              "gasfund.xsat::config: rams_reward_address is not an account");
+    } else {
+        check(xsat::utils::is_valid_evm_address(config.rams_reward_address),
+              "gasfund.xsat::config: rams_reward_address is not a valid evm address");
+    }
     _config.set(config, get_self());
 }
 
 [[eosio::action]]
 void gasfund::claim(const name& receiver, const uint8_t receiver_type) {
-    require_auth(receiver);
+    auto sender = get_sender();
 
     // send log
+    auto claim_result = receiver_claim(receiver, receiver_type);
     gasfund::claimlog_action _claimlog(get_self(), {get_self(), "active"_n});
-    _claimlog.send(receiver, receiver_type, receiver_claim(receiver, receiver_type));
+    _claimlog.send(sender, receiver, receiver_type, claim_result);
 }
 
 // receiver_type: 0 for validator, 1 for synchronizer
 [[eosio::action]]
-void gasfund::evmclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender, const name& receiver,
-                       const uint8_t receiver_type) {
+void gasfund::evmclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender,
+                       const name& receiver, const uint8_t receiver_type) {
     require_auth(caller);
 
     auto config = _config.get();
@@ -51,9 +61,7 @@ void gasfund::evmclaim(const name& caller, const checksum160& proxy_address, con
     check(proxy_address == config.evm_proxy_address, "gasfund.xsat::evmclaim: invalid proxy address");
 
     // send log
-    print("evmclaim: ", caller, " ", proxy_address, " ", sender, " ", receiver, " ", receiver_type);
     auto claim_result = receiver_claim(receiver, receiver_type);
-    print("claim_result: ", claim_result);
     gasfund::evmclaimlog_action _evmclaimlog(get_self(), {get_self(), "active"_n});
     _evmclaimlog.send(caller, proxy_address, sender, receiver, receiver_type, claim_result);
 }
@@ -62,19 +70,26 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
 
     auto _consensus_fees_index = _consensus_fees.get_index<"byreceiver"_n>();
     auto scope = receiver_type == 0 ? receiver.value : receiver.value | XSAT_SCOPE_MASK;
-    auto _consensus_fees_itr
-        = _consensus_fees_index.require_find(scope, "gasfund.xsat::receiver_claim: consensus fees not found");
+    auto _consensus_fees_itr =
+        _consensus_fees_index.require_find(scope, "gasfund.xsat::receiver_claim: consensus fees not found");
     check(_consensus_fees_itr->unclaimed.amount > 0, "gasfund.xsat::receiver_claim: no unclaimed reward");
 
     // send to validator reward address
-    endorse_manage::validator_table _validator
-        = endorse_manage::validator_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+    endorse_manage::validator_table _validator =
+        endorse_manage::validator_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
     auto validator_itr = _validator.require_find(receiver.value, "gasfund.xsat::receiver_claim: validator not found");
 
     auto _feestat_itr = _fees_stat.get_or_default();
     auto unclaimed = _consensus_fees_itr->unclaimed;
     check(_feestat_itr.consensus_unclaimed.amount >= unclaimed.amount,
           "gasfund.xsat::receiver_claim: consensus unclaimed is less than receiver unclaimed");
+
+    // transfer to validator reward address
+    if (validator_itr->memo.size() <= 12) {
+        token_transfer(get_self(), validator_itr->reward_recipient, extended_asset(unclaimed, BTC_CONTRACT), "gasfund claim");
+    } else {
+        token_transfer(get_self(), validator_itr->memo, extended_asset(unclaimed, BTC_CONTRACT));
+    }
 
     _consensus_fees_index.modify(_consensus_fees_itr, get_self(), [&](auto& row) {
         row.unclaimed = asset(0, unclaimed.symbol);
@@ -83,7 +98,8 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
     });
 
     auto _feestat = _fees_stat.get_or_default();
-    _feestat.consensus_unclaimed = asset(safemath::sub(_feestat.consensus_unclaimed.amount, unclaimed.amount), unclaimed.symbol);
+    _feestat.consensus_unclaimed =
+        asset(safemath::sub(_feestat.consensus_unclaimed.amount, unclaimed.amount), unclaimed.symbol);
     _fees_stat.set(_feestat, get_self());
 
     return unclaimed;
@@ -91,7 +107,6 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
 
 [[eosio::action]]
 void gasfund::distribute() {
-    require_auth(get_self());
 
     auto config = _config.get_or_default();
     // chain state
@@ -213,8 +228,8 @@ void gasfund::distribute() {
             });
         } else {
             auto primary_itr = _distribute_details.find(existing_record->id);
-            _distribute_details.modify(
-                primary_itr, get_self(), [&, current_reward](auto& row) { row.reward.amount += current_reward; });
+            _distribute_details.modify(primary_itr, get_self(),
+                                       [&, current_reward](auto& row) { row.reward.amount += current_reward; });
         }
     }
 
@@ -239,8 +254,8 @@ void gasfund::distribute() {
         } else {
             auto primary_itr = _distribute_details.find(existing_record->id);
             // synchronizer has validator record, update existing record
-            _distribute_details.modify(
-                primary_itr, get_self(), [&, current_reward](auto& row) { row.reward.amount += current_reward; });
+            _distribute_details.modify(primary_itr, get_self(),
+                                       [&, current_reward](auto& row) { row.reward.amount += current_reward; });
         }
     }
 
@@ -320,8 +335,8 @@ void gasfund::distribute() {
                 });
             } else {
                 auto primary_itr = _consensus_fees.find(_consensus_fees_itr->id);
-                _consensus_fees.modify(
-                    primary_itr, get_self(), [&, consensus_fees](auto& row) { row.unclaimed.amount += consensus_fees; });
+                _consensus_fees.modify(primary_itr, get_self(),
+                                       [&, consensus_fees](auto& row) { row.unclaimed.amount += consensus_fees; });
             }
         }
     }
@@ -330,8 +345,10 @@ void gasfund::distribute() {
     _feestat.last_height = end_height;
     _feestat.enf_unclaimed = asset(safemath::add(_feestat.enf_unclaimed.amount, total_enf_fees), BTC_SYMBOL);
     _feestat.rams_unclaimed = asset(safemath::add(_feestat.rams_unclaimed.amount, total_rams_fees), BTC_SYMBOL);
-    _feestat.consensus_unclaimed = asset(safemath::add(_feestat.consensus_unclaimed.amount, total_consensus_fees), BTC_SYMBOL);
-    _feestat.total_consensus_fees = asset(safemath::add(_feestat.total_consensus_fees.amount, total_consensus_fees), BTC_SYMBOL);
+    _feestat.consensus_unclaimed =
+        asset(safemath::add(_feestat.consensus_unclaimed.amount, total_consensus_fees), BTC_SYMBOL);
+    _feestat.total_consensus_fees =
+        asset(safemath::add(_feestat.total_consensus_fees.amount, total_consensus_fees), BTC_SYMBOL);
     _feestat.total_enf_fees = asset(safemath::add(_feestat.total_enf_fees.amount, total_enf_fees), BTC_SYMBOL);
     _feestat.total_rams_fees = asset(safemath::add(_feestat.total_rams_fees.amount, total_rams_fees), BTC_SYMBOL);
     _fees_stat.set(_feestat, get_self());
@@ -408,7 +425,8 @@ gasfund::calculate_btc_validator_rewards(const reward_distribution::reward_log_t
     }
 
     // Check for valid endorsed staking
-    check(_reward_log_itr->endorsed_staking > 0, "gasfund.xsat::calculate_btc_validator_rewards: Endorsed staking is zero");
+    check(_reward_log_itr->endorsed_staking > 0,
+          "gasfund.xsat::calculate_btc_validator_rewards: Endorsed staking is zero");
 
     uint64_t total_assigned_reward = 0;
 
@@ -435,9 +453,8 @@ gasfund::calculate_btc_validator_rewards(const reward_distribution::reward_log_t
     return result;
 }
 
-vector<gasfund::reward_distribution_result>
-gasfund::calculate_xsat_validator_rewards(const reward_distribution::reward_log_table::const_iterator& _xsat_reward_log_itr,
-                                          uint64_t consensus_reward) {
+vector<gasfund::reward_distribution_result> gasfund::calculate_xsat_validator_rewards(
+    const reward_distribution::reward_log_table::const_iterator& _xsat_reward_log_itr, uint64_t consensus_reward) {
 
     vector<reward_distribution_result> result;
 
@@ -513,14 +530,15 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
     // read distribute
     auto _distribute_itr = _distributes.find(start_height);
     check(_distribute_itr != _distributes.end(),
-          "gasfund.xsat::handle_evm_fees_transfer: distribute record not found for height " + std::to_string(start_height));
+          "gasfund.xsat::handle_evm_fees_transfer: distribute record not found for height " +
+              std::to_string(start_height));
 
     // read distribute details
     distribute_detail_table _distribute_details(get_self(), start_height);
     auto _distribute_details_itr = _distribute_details.begin();
-    check(
-        _distribute_details_itr != _distribute_details.end(),
-        "gasfund.xsat::handle_evm_fees_transfer: distribute details record not found for height " + std::to_string(start_height));
+    check(_distribute_details_itr != _distribute_details.end(),
+          "gasfund.xsat::handle_evm_fees_transfer: distribute details record not found for height " +
+              std::to_string(start_height));
 
     auto total_rewards = _distribute_itr->total_xsat_rewards;
 
@@ -558,8 +576,8 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
                 row.total_claimed = asset(0, BTC_SYMBOL);
             });
         } else {
-            _consensus_fees.modify(
-                _consensus_fees_itr, get_self(), [&](auto& row) { row.unclaimed += asset(_fees, BTC_SYMBOL); });
+            _consensus_fees.modify(_consensus_fees_itr, get_self(),
+                                   [&](auto& row) { row.unclaimed += asset(_fees, BTC_SYMBOL); });
         }
     }
 
@@ -567,14 +585,26 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
     _feestat.last_evm_height = end_height;
     _feestat.enf_unclaimed = asset(safemath::add(_feestat.enf_unclaimed.amount, enf_fees), BTC_SYMBOL);
     _feestat.rams_unclaimed = asset(safemath::add(_feestat.rams_unclaimed.amount, rams_fees), BTC_SYMBOL);
-    _feestat.consensus_unclaimed = asset(safemath::add(_feestat.consensus_unclaimed.amount, total_consensus_fees), BTC_SYMBOL);
+    _feestat.consensus_unclaimed =
+        asset(safemath::add(_feestat.consensus_unclaimed.amount, total_consensus_fees), BTC_SYMBOL);
 
-    _feestat.total_consensus_fees = asset(safemath::add(_feestat.total_consensus_fees.amount, total_consensus_fees), BTC_SYMBOL);
+    _feestat.total_consensus_fees =
+        asset(safemath::add(_feestat.total_consensus_fees.amount, total_consensus_fees), BTC_SYMBOL);
     _feestat.total_rams_fees = asset(safemath::add(_feestat.total_rams_fees.amount, rams_fees), BTC_SYMBOL);
     _feestat.total_enf_fees = asset(safemath::add(_feestat.total_enf_fees.amount, enf_fees), BTC_SYMBOL);
 
     _feestat.total_evm_gas_fees = asset(safemath::add(_feestat.total_evm_gas_fees.amount, quantity.amount), BTC_SYMBOL);
     _fees_stat.set(_feestat, get_self());
+}
+
+[[eosio::action]]
+void gasfund::enfclaim() {
+    auto sender = get_sender();
+    auto config = _config.get_or_default();
+    auto unclaimed = enfclaim_without_auth(config);
+    // send log
+    gasfund::enfclaimlog_action _enfclaimlog(get_self(), {get_self(), "active"_n});
+    _enfclaimlog.send(sender, config.enf_reward_address, unclaimed);
 }
 
 [[eosio::action]]
@@ -585,20 +615,37 @@ void gasfund::evmenfclaim(const name& caller, const checksum160& proxy_address, 
     check(config.evm_proxy_address != checksum160(), "gasfund.xsat::evmenfclaim: proxy address is not set");
     check(proxy_address == config.evm_proxy_address, "gasfund.xsat::evmenfclaim: invalid proxy address");
 
-    check(config.enf_reward_address != checksum160(), "gasfund.xsat::evmenfclaim: enf reward address is not set");
-
-    auto _feestat = _fees_stat.get_or_default();
-    check(_feestat.enf_unclaimed.amount > 0, "gasfund.xsat::evmenfclaim: enf unclaimed is zero");
-
-    // send fees
-
-    auto unclaimed = _feestat.enf_unclaimed;
-    _feestat.enf_unclaimed = asset(0, BTC_SYMBOL);
-    _fees_stat.set(_feestat, get_self());
-
+    auto unclaimed = enfclaim_without_auth(config);
     // send log
     gasfund::evmenfclog_action _evmenfclog(get_self(), {get_self(), "active"_n});
     _evmenfclog.send(caller, proxy_address, sender, unclaimed);
+}
+
+asset gasfund::enfclaim_without_auth(const config_row& config) {
+    check(config.enf_reward_address != "", "gasfund.xsat::enfclaim_without_auth: enf reward address is not set");
+
+    auto _feestat = _fees_stat.get_or_default();
+    check(_feestat.enf_unclaimed.amount > 0, "gasfund.xsat::enfclaim_without_auth: enf unclaimed is zero");
+
+    // send fees
+    auto unclaimed = _feestat.enf_unclaimed;
+    token_transfer(get_self(), config.enf_reward_address, extended_asset(unclaimed, BTC_CONTRACT));
+
+    _feestat.enf_unclaimed = asset(0, BTC_SYMBOL);
+    _fees_stat.set(_feestat, get_self());
+
+    return unclaimed;
+}
+
+[[eosio::action]]
+void gasfund::ramsclaim() {
+    auto sender = get_sender();
+    auto config = _config.get_or_default();
+    auto unclaimed = ramsclaim_without_auth(config);
+
+    // send log
+    gasfund::ramsclaimlog_action _ramsclaimlog(get_self(), {get_self(), "active"_n});
+    _ramsclaimlog.send(sender, config.rams_reward_address, unclaimed);
 }
 
 [[eosio::action]]
@@ -609,19 +656,37 @@ void gasfund::evmramsclaim(const name& caller, const checksum160& proxy_address,
     check(config.evm_proxy_address != checksum160(), "gasfund.xsat::evmramsclaim: proxy address is not set");
     check(proxy_address == config.evm_proxy_address, "gasfund.xsat::evmramsclaim: invalid proxy address");
 
-    check(config.rams_reward_address != checksum160(), "gasfund.xsat::evmramsclaim: rams reward address is not set");
-    auto _feestat = _fees_stat.get_or_default();
-    check(_feestat.rams_unclaimed.amount > 0, "gasfund.xsat::evmramsclaim: rams unclaimed is zero");
-
-    auto unclaimed = _feestat.rams_unclaimed;
-    // TODO: send fees
-
-    _feestat.rams_unclaimed = asset(0, BTC_SYMBOL);
-    _fees_stat.set(_feestat, get_self());
+    auto unclaimed = ramsclaim_without_auth(config);
 
     // send log
     gasfund::evmramsclog_action _evmramsclog(get_self(), {get_self(), "active"_n});
     _evmramsclog.send(caller, proxy_address, sender, unclaimed);
+}
+
+asset gasfund::ramsclaim_without_auth(const config_row& config) {
+    check(config.rams_reward_address != "", "gasfund.xsat::ramsclaim_without_auth: rams reward address is not set");
+
+    auto _feestat = _fees_stat.get_or_default();
+    check(_feestat.rams_unclaimed.amount > 0, "gasfund.xsat::ramsclaim_without_auth: rams unclaimed is zero");
+
+    auto unclaimed = _feestat.rams_unclaimed;
+    token_transfer(get_self(), config.rams_reward_address, extended_asset(unclaimed, BTC_CONTRACT));
+
+    _feestat.rams_unclaimed = asset(0, BTC_SYMBOL);
+    _fees_stat.set(_feestat, get_self());
+
+    return unclaimed;
+}
+
+void gasfund::token_transfer(const name& from, const string& to, const extended_asset& value) {
+    btc::transfer_action transfer(value.contract, {from, "active"_n});
+
+    bool is_eos_account = to.size() <= 12;
+    if (is_eos_account) {
+        transfer.send(from, name(to), value.quantity, "");
+    } else {
+        transfer.send(from, ERC20_CONTRACT, value.quantity, to);
+    }
 }
 
 void gasfund::token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo) {
