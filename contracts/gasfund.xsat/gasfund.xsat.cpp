@@ -116,7 +116,7 @@ void gasfund::distribute() {
           "gasfund.xsat::distribute: current height is less than start distribute height");
 
     auto _feestat = _fees_stat.get_or_default();
-    auto start_height = _feestat.last_height > 0 ? _feestat.last_height + 1 : config.start_distribute_height;
+    auto start_height = _feestat.last_height > 0 ? _feestat.last_height: config.start_distribute_height;
     auto end_height = chain_state.irreversible_height;
     auto min_height = start_height + config.distribute_min_height_interval;
     auto max_height = start_height + config.distribute_max_height_interval;
@@ -140,7 +140,7 @@ void gasfund::distribute() {
     std::map<name, uint64_t> validator_rewards;
     std::map<name, uint64_t> synchronizer_rewards;
 
-    for (auto height = start_height; height <= end_height; height++) {
+    for (auto height = start_height + 1; height <= end_height; height++) {
         // check feestat
         auto _resc_feestat_itr = _resc_feestat.find(height);
         check(_resc_feestat_itr != _resc_feestat.end(),
@@ -580,6 +580,10 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
                                    [&](auto& row) { row.unclaimed += asset(_fees, BTC_SYMBOL); });
         }
     }
+
+    _distributes.modify(_distribute_itr, get_self(), [&](auto& row) {
+        row.end_height = end_height;
+    });
 
     // Update fees statistics
     _feestat.last_evm_height = end_height;
