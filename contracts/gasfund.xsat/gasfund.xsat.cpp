@@ -172,8 +172,6 @@ void gasfund::distribute() {
         // Ensure consensus_fees doesn't underflow
         uint64_t fee_sum = safemath::add(enf_fees, rams_fees);
         uint64_t consensus_fees = (fee_sum <= fees) ? (fees - fee_sum) : 0;
-        print("height: ", height, " fees: ", fees, " enf_fees: ", enf_fees, " rams_fees: ", rams_fees,
-              " consensus_fees: ", consensus_fees, "---");
 
         total_fees = safemath::add(total_fees, fees);
         total_enf_fees = safemath::add(total_enf_fees, enf_fees);
@@ -368,6 +366,10 @@ void gasfund::distribute() {
     _feestat.total_enf_fees = asset(safemath::add(_feestat.total_enf_fees.amount, total_enf_fees), BTC_SYMBOL);
     _feestat.total_rams_fees = asset(safemath::add(_feestat.total_rams_fees.amount, total_rams_fees), BTC_SYMBOL);
     _fees_stat.set(_feestat, get_self());
+
+    // tranfer from fees.xsat
+    btc::transfer_action transfer(BTC_CONTRACT, {FEES_CONTRACT, "xferbtc"_n});
+    transfer.send(FEES_CONTRACT, get_self(), asset(total_fees, BTC_SYMBOL), "collect by gasfund.xsat");
 
     // send log
     gasfund::distributlog_action _distributlog(get_self(), {get_self(), "active"_n});
