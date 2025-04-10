@@ -37,6 +37,10 @@ void gasfund::config(const config_row& config) {
         check(xsat::utils::is_valid_evm_address(config.rams_reward_address),
               "gasfund.xsat::config: rams_reward_address is not a valid evm address");
     }
+
+    check(config.distribute_min_height_interval > 0, "gasfund.xsat::config: distribute_min_height_interval must be greater than 0");
+    check(config.distribute_max_height_interval > 0, "gasfund.xsat::config: distribute_max_height_interval must be greater than 0");
+    check(config.distribute_min_height_interval <= config.distribute_max_height_interval, "gasfund.xsat::config: distribute_min_height_interval must be less than or equal to distribute_max_height_interval");
     _config.set(config, get_self());
 }
 
@@ -583,6 +587,7 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
 
     _distributes.modify(_distribute_itr, get_self(), [&](auto& row) {
         row.end_height = end_height;
+        row.distribute_time = current_time_point();
     });
 
     // Update fees statistics
