@@ -29,7 +29,7 @@ uint64_t gasfund::safe_pct(uint64_t value, uint64_t numerator, uint64_t denomina
 void gasfund::config(const config_row& config) {
     require_auth(get_self());
 
-    // check config
+    // check rams_reward_address
     if (config.rams_reward_address.size() <= 12) {
         check(is_account(name(config.rams_reward_address)),
               "gasfund.xsat::config: rams_reward_address is not an account");
@@ -38,9 +38,21 @@ void gasfund::config(const config_row& config) {
               "gasfund.xsat::config: rams_reward_address is not a valid evm address");
     }
 
+    // check enf_reward_address
+    if (config.enf_reward_address.size() <= 12) {
+        check(is_account(name(config.enf_reward_address)),
+              "gasfund.xsat::config: enf_reward_address is not an account");
+    } else {
+        check(xsat::utils::is_valid_evm_address(config.enf_reward_address),
+              "gasfund.xsat::config: enf_reward_address is not a valid evm address");
+    }
     check(config.distribute_min_height_interval > 0, "gasfund.xsat::config: distribute_min_height_interval must be greater than 0");
     check(config.distribute_max_height_interval > 0, "gasfund.xsat::config: distribute_max_height_interval must be greater than 0");
     check(config.distribute_min_height_interval <= config.distribute_max_height_interval, "gasfund.xsat::config: distribute_min_height_interval must be less than or equal to distribute_max_height_interval");
+
+    check(config.enf_reward_rate + config.rams_reward_rate <= RATE_BASE_10000, "gasfund.xsat::config: enf_reward_rate + rams_reward_rate must be less than or equal to 10000");
+    check(config.start_distribute_height > 840000, "gasfund.xsat::config: start_distribute_height must be greater than 0");
+
     _config.set(config, get_self());
 }
 
@@ -561,6 +573,7 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
         last_receiver = itr->receiver;
     }
 
+    auto _consensus_fees_index = _consensus_fees.get_index<"byreceiver"_n>();
     for (auto itr = _distribute_details.begin(); itr != _distribute_details.end(); itr++) {
         auto _fees = safe_pct(total_consensus_fees, itr->reward.amount, total_rewards.amount);
         if (itr->receiver == last_receiver) {
@@ -570,8 +583,8 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
             remaining_fees = safemath::sub(remaining_fees, _fees);
         }
 
-        auto _consensus_fees_itr = _consensus_fees.find(itr->get_receiver_id());
-        if (_consensus_fees_itr == _consensus_fees.end()) {
+        auto _consensus_fees_itr = _consensus_fees_index.find(itr->get_receiver_id());
+        if (_consensus_fees_itr == _consensus_fees_index.end()) {
             _consensus_fees.emplace(get_self(), [&](auto& row) {
                 row.id = _consensus_fees.available_primary_key();
                 row.receiver = itr->receiver;
@@ -580,7 +593,8 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
                 row.total_claimed = asset(0, BTC_SYMBOL);
             });
         } else {
-            _consensus_fees.modify(_consensus_fees_itr, get_self(),
+            auto primary_itr = _consensus_fees.find(_consensus_fees_itr->id);
+            _consensus_fees.modify(primary_itr, get_self(),
                                    [&](auto& row) { row.unclaimed += asset(_fees, BTC_SYMBOL); });
         }
     }
