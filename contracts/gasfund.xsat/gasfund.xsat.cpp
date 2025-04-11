@@ -192,7 +192,7 @@ void gasfund::distribute() {
         }
     }
 
-    auto evm_start_height = _feestat.last_evm_height;
+    auto evm_start_height = _feestat.last_evm_height > 0 ? _feestat.last_evm_height : config.start_distribute_height;
     auto _distribute_itr = _distributes.find(evm_start_height);
     if (_distribute_itr == _distributes.end()) {
         // Create distribution record
@@ -542,7 +542,7 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
     check(_feestat.last_height > _feestat.last_evm_height,
           "gasfund.xsat::handle_evm_fees_transfer: current height is less than last evm height");
 
-    auto start_height = _feestat.last_evm_height;
+    auto start_height = _feestat.last_evm_height > 0 ? _feestat.last_evm_height : config.start_distribute_height;
     auto end_height = _feestat.last_height;
 
     // read distribute
