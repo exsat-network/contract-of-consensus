@@ -27,13 +27,43 @@ public:
     static constexpr string_view GASFUND_MEMO = "gasfund";
     /**
      * @brief Configuration structure, stores the last calculated block heights
+     *
+     * ### TABLE `config`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint16_t} enf_reward_rate` - EVM gas fee rate (5000 = 50%)
+     * - `{uint16_t} rams_reward_rate` - RAMS gas fee rate (2500 = 25%)
+     * - `{uint16_t} distribute_min_height_interval` - Min calculate interval (2 = 2 blocks)
+     * - `{uint16_t} distribute_max_height_interval` - Max distribute height interval (16 = 16 blocks)
+     * - `{uint64_t} start_distribute_height` - Start distribute height
+     * - `{name} evm_fees_account` - EVM fees account (evmutil.xsat)
+     * - `{checksum160} evm_proxy_address` - EVM proxy address
+     * - `{string} enf_reward_address` - EVM reward address
+     * - `{string} rams_reward_address` - RAMS reward address
+     *
+     * ### example
+     *
+     * ```json
+     * {
+     *   "enf_reward_rate": 5000,
+     *   "rams_reward_rate": 2500,
+     *   "distribute_min_height_interval": 1,
+     *   "distribute_max_height_interval": 10,
+     *   "start_distribute_height": 888888,
+     *   "evm_fees_account": "evmutil.xsat",
+     *   "evm_proxy_address": "0x1234567890abcdef1234567890abcdef1234567890",
+     *   "enf_reward_address": "0x1234567890abcdef1234567890abcdef1234567890",
+     *   "rams_reward_address": "receiver.rams"
+     * }
      */
     struct [[eosio::table]] config_row {
-        uint16_t enf_reward_rate = 5000;              // EVM gas fee rate
-        uint16_t rams_reward_rate = 2500;             // RAMS gas fee rate
-        uint16_t distribute_min_height_interval = 2;  // Min calculate interval
-        uint16_t distribute_max_height_interval = 16; // Max distribute height interval
-        uint64_t start_distribute_height = 888888;    // Start distribute height
+        uint16_t enf_reward_rate = 5000;
+        uint16_t rams_reward_rate = 2500;
+        uint16_t distribute_min_height_interval = 1;
+        uint16_t distribute_max_height_interval = 10;
+        uint64_t start_distribute_height = 888888;
         name evm_fees_account = "evmutil.xsat"_n;
 
         checksum160 evm_proxy_address;
@@ -45,49 +75,80 @@ public:
     /**
      * @brief Reward distribution record structure, storing details of the last
      * reward calculation
+     *
+     * ### TABLE `feestat`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint64_t} last_height` - Last block height for EOS gas fee calculation
+     * - `{uint64_t} last_evm_height` - Last block height for EVM gas fee calculation
+     * - `{asset} enf_unclaimed` - ENF unclaimed gas fees
+     * - `{asset} rams_unclaimed` - RAMS unclaimed gas fees
+     * - `{asset} consensus_unclaimed` - Consensus unclaimed gas fees ( sychronizer & validator )
+     * - `{asset} total_enf_fees` - Total ENF gas fees
+     * - `{asset} total_rams_fees` - Total RAMS gas fees
+     * - `{asset} total_evm_gas_fees` - Total EVM gas fees
+     * - `{asset} total_consensus_fees` - Total consensus fees
+     *
+     *
      */
     struct [[eosio::table]] fees_stat_row {
-        uint64_t last_height;     // Last block height for reward calculation
-        uint64_t last_evm_height; // Last EVM gas fee calculation height
+        uint64_t last_height;
+        uint64_t last_evm_height;
 
-        asset enf_unclaimed;       // ENF unclaimed gas fees
-        asset rams_unclaimed;      // RAMS unclaimed gas fees
-        asset consensus_unclaimed; // Consensus unclaimed gas fees
+        asset enf_unclaimed;
+        asset rams_unclaimed;
+        asset consensus_unclaimed;
 
-        asset total_enf_fees;       // Total ENF gas fees
-        asset total_rams_fees;      // Total RAMS gas fees
-        asset total_evm_gas_fees;   // Total EVM gas fees
-        asset total_consensus_fees; // Total consensus fees
+        asset total_enf_fees;
+        asset total_rams_fees;
+        asset total_evm_gas_fees;
+        asset total_consensus_fees;
     };
 
     typedef eosio::singleton<"feestat"_n, fees_stat_row> fees_stat_table;
 
     /**
      * @brief Consensus fees information
+     *
+     * ### TABLE `consensusfee`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint64_t} id` - Consensus fee ID
+     * - `{name} receiver` - Receiver account ( validator or synchronizer eos account)
+     * - `{name} receiver_type` - Receiver type (validator or synchronizer)
+     * - `{asset} unclaimed` - Unclaimed reward amount
+     * - `{asset} total_claimed` - Total claimed reward amount
+     * - `{time_point_sec} last_claim_time` - Last claim time
+     *
+     *  total_reward = total_claimed + unclaimed
      */
     struct [[eosio::table]] consensus_fee_row {
         uint64_t id;
-        name receiver;                  // Receiver account
-        name receiver_type;             // Validator or Synchronizer
-        asset unclaimed;                // Unclaimed reward amount
-        asset total_claimed;            // Total claimed reward amount
-        time_point_sec last_claim_time; // Last claim time
+        name receiver;
+        name receiver_type;
+        asset unclaimed;
+        asset total_claimed;
+        time_point_sec last_claim_time;
 
         uint64_t get_receiver_id() const {
-            return receiver_type == "validator"_n ? receiver.value
-                                                  : receiver.value | XSAT_SCOPE_MASK;
+            return receiver_type == "validator"_n ? receiver.value : receiver.value | XSAT_SCOPE_MASK;
         }
+
         uint64_t primary_key() const {
             return id;
         }
+
         uint64_t by_receiver() const {
             return get_receiver_id();
         }
     };
     typedef eosio::multi_index<
         "consensusfee"_n, consensus_fee_row,
-        indexed_by<"byreceiver"_n,
-                   const_mem_fun<consensus_fee_row, uint64_t, &consensus_fee_row::by_receiver>>>
+        indexed_by<"byreceiver"_n, const_mem_fun<consensus_fee_row, uint64_t, &consensus_fee_row::by_receiver>>>
         consensus_fees_table;
 
     /**
@@ -95,16 +156,31 @@ public:
      *
      * Records the distribution details of each EVM fee transfer
      * Uses start_height as primary key to track each distribute
+     *
+     * ### TABLE `distribute`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{uint64_t} start_height` - Start height ( last transfer evm gas fee height )
+     * - `{uint64_t} end_height` - End height ( current transfer evm gas fee height )
+     * - `{asset} total_fees` - Total fees (between start_height and end_height total evm gas fee )
+     * - `{asset} enf_fees` - ENF fees (between start_height and end_height enf evm gas fee )
+     * - `{asset} rams_fees` - RAMS fees (between start_height and end_height rams evm gas fee )
+     * - `{asset} consensus_fees` - Consensus fees (between start_height and end_height consensus evm gas fee )
+     * - `{asset} total_xsat_rewards` - Total XSAT rewards (between start_height and end_height total xsat rewards )
+     * - `{time_point_sec} distribute_time` - Distribute time
+     *
      */
     struct [[eosio::table]] distribute_row {
-        uint64_t start_height;          // Start height
-        uint64_t end_height;            // End height, scope for each distribute
-        asset total_fees;               // Total fees
-        asset enf_fees;                 // ENF fees
-        asset rams_fees;                // RAMS fees
-        asset consensus_fees;           // Consensus fees
-        asset total_xsat_rewards;       // Total XSAT rewards
-        time_point_sec distribute_time; // Distribute time
+        uint64_t start_height;          
+        uint64_t end_height;           
+        asset total_fees;              
+        asset enf_fees;                
+        asset rams_fees;               
+        asset consensus_fees;          
+        asset total_xsat_rewards;      
+        time_point_sec distribute_time; 
 
         uint64_t primary_key() const {
             return start_height;
@@ -116,18 +192,26 @@ public:
      * @brief Gas fee distribution record
      *
      * Stores the distribution details of gas fees for each receiver
-     * Uses start_height as scope to track distributions between height
-     * calculations
+     *
+     * ### TABLE `distdetails`
+     *
+     * ### scope `start_height from distribute table`
+     * ### params
+     *
+     * - `{uint64_t} id` - Distribute detail ID
+     * - `{name} receiver` - Receiver account
+     * - `{name} receiver_type` - Receiver type (validator or synchronizer)
+     * - `{asset} reward` - total xsat rewards between start_height and end_height
+     *
      */
     struct [[eosio::table]] distribute_detail_row {
         uint64_t id;
-        name receiver;      // Validator or Synchronizer account
-        name receiver_type; // Validator or Synchronizer
-        asset reward;       // Distributed reward amount
+        name receiver;      
+        name receiver_type; 
+        asset reward;       
 
         uint64_t get_receiver_id() const {
-            return receiver_type == "validator"_n ? receiver.value
-                                                  : receiver.value | XSAT_SCOPE_MASK;
+            return receiver_type == "validator"_n ? receiver.value : receiver.value | XSAT_SCOPE_MASK;
         }
         uint64_t primary_key() const {
             return id;
@@ -138,43 +222,41 @@ public:
     };
     typedef eosio::multi_index<
         "distdetails"_n, distribute_detail_row,
-        indexed_by<"byreceiver"_n, const_mem_fun<distribute_detail_row, uint64_t,
-                                                 &distribute_detail_row::by_receiver>>>
+        indexed_by<"byreceiver"_n, const_mem_fun<distribute_detail_row, uint64_t, &distribute_detail_row::by_receiver>>>
         distribute_detail_table;
 
-    /**
-     * @brief Distribute rewards to validators
-     *
-     * Reads the fee rewards and validator list from the previous block height,
-     * calculates the reward amount for each validator and distributes it
-     */
-
+    // handle and distribute evm gas fee transfer
     [[eosio::on_notify("*::transfer")]]
     void on_transfer(const name& from, const name& to, const asset& quantity, const string& memo);
 
+    // calculate and distribute EOS gas fee
     [[eosio::action]]
     void distribute();
 
+    // claim gas fee for validator and synchronizer
     [[eosio::action]]
     void claim(const name& receiver, const uint8_t receiver_type);
 
+    // claim gas fee for ENF
     [[eosio::action]]
     void enfclaim();
 
+    // claim gas fee for RAMS
     [[eosio::action]]
     void ramsclaim();
 
+    // claim gas fee for validator and synchronizer from evm
     [[eosio::action]]
-    void evmclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender,
-                  const name& receiver, const uint8_t receiver_type);
+    void evmclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender, const name& receiver,
+                  const uint8_t receiver_type);
 
+    // claim gas fee for ENF from evm
     [[eosio::action]]
-    void evmenfclaim(const name& caller, const checksum160& proxy_address,
-                     const checksum160& sender);
+    void evmenfclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender);
 
+    // claim gas fee for RAMS from evm
     [[eosio::action]]
-    void evmramsclaim(const name& caller, const checksum160& proxy_address,
-                      const checksum160& sender);
+    void evmramsclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender);
 
     /**
      * @brief Set configuration
@@ -184,6 +266,7 @@ public:
     [[eosio::action]]
     void config(const config_row& config);
 
+#ifdef DEBUG
     [[eosio::action]]
     void cleartable(const name& table) {
         require_auth(get_self());
@@ -205,6 +288,7 @@ public:
             _config.remove();
         }
     };
+#endif
 
     // Log action
     [[eosio::action]]
@@ -218,8 +302,7 @@ public:
     };
 
     [[eosio::action]]
-    void claimlog(const name& sender, const name& receiver, const uint8_t receiver_type,
-                  const asset& quantity) {
+    void claimlog(const name& sender, const name& receiver, const uint8_t receiver_type, const asset& quantity) {
         require_auth(get_self());
     };
 
@@ -234,9 +317,8 @@ public:
     };
 
     [[eosio::action]]
-    void evmclaimlog(const name& caller, const checksum160& proxy_address,
-                     const checksum160& sender, const name& receiver, const uint8_t receiver_type,
-                     const asset& quantity) {
+    void evmclaimlog(const name& caller, const checksum160& proxy_address, const checksum160& sender,
+                     const name& receiver, const uint8_t receiver_type, const asset& quantity) {
         require_auth(get_self());
     };
 
@@ -247,8 +329,8 @@ public:
     };
 
     [[eosio::action]]
-    void evmramsclog(const name& caller, const checksum160& proxy_address,
-                     const checksum160& sender, const asset& quantity) {
+    void evmramsclog(const name& caller, const checksum160& proxy_address, const checksum160& sender,
+                     const asset& quantity) {
         require_auth(get_self());
     };
 
@@ -295,26 +377,24 @@ private:
     distribute_table _distributes = distribute_table(_self, _self.value);
     distribute_table _evm_distributes = distribute_table(_self, EVM_UTIL_CONTRACT.value);
 
-    void handle_evm_fees_transfer(const name& from, const name& to, const asset& quantity,
-                                  const string& memo);
+    void handle_evm_fees_transfer(const name& from, const name& to, const asset& quantity, const string& memo);
     asset receiver_claim(const name& receiver, const uint8_t receiver_type);
 
     // Distribution helper functions - optimized parameter passing for basic types
     reward_calculation_result calculate_reward(uint64_t height);
 
-    vector<reward_distribution_result> calculate_btc_validator_rewards(
-        const reward_distribution::reward_log_table::const_iterator& _reward_log_itr,
-        uint64_t staking_reward);
+    vector<reward_distribution_result>
+    calculate_btc_validator_rewards(const reward_distribution::reward_log_table::const_iterator& _reward_log_itr,
+                                    uint64_t staking_reward);
 
-    vector<reward_distribution_result> calculate_xsat_validator_rewards(
-        const reward_distribution::reward_log_table::const_iterator& _xsat_reward_log_itr,
-        uint64_t consensus_reward);
+    vector<reward_distribution_result>
+    calculate_xsat_validator_rewards(const reward_distribution::reward_log_table::const_iterator& _xsat_reward_log_itr,
+                                     uint64_t consensus_reward);
 
     asset enfclaim_without_auth(const config_row& config);
     asset ramsclaim_without_auth(const config_row& config);
 
     uint64_t safe_pct(uint64_t value, uint64_t numerator, uint64_t denominator);
     void token_transfer(const name& from, const string& to, const extended_asset& value);
-    void token_transfer(const name& from, const name& to, const extended_asset& value,
-                        const string& memo);
+    void token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo);
 };
