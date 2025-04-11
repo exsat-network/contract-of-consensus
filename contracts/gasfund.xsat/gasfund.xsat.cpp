@@ -1,12 +1,12 @@
 #include "gasfund.xsat.hpp"
-#include <eosio/system.hpp>
-#include <btc.xsat/btc.xsat.hpp>
-#include <poolreg.xsat/poolreg.xsat.hpp>
-#include <rescmng.xsat/rescmng.xsat.hpp>
-#include <utxomng.xsat/utxomng.xsat.hpp>
 #include "../internal/defines.hpp"
 #include "../internal/safemath.hpp"
 #include "../internal/utils.hpp"
+#include <btc.xsat/btc.xsat.hpp>
+#include <eosio/system.hpp>
+#include <poolreg.xsat/poolreg.xsat.hpp>
+#include <rescmng.xsat/rescmng.xsat.hpp>
+#include <utxomng.xsat/utxomng.xsat.hpp>
 
 /**
  * @brief Safe percentage calculation function to prevent overflow
@@ -96,6 +96,7 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
     auto _consensus_fees_itr =
         _consensus_fees_index.require_find(scope, "gasfund.xsat::receiver_claim: consensus fees not found");
     check(_consensus_fees_itr->unclaimed.amount > 0, "gasfund.xsat::receiver_claim: no unclaimed reward");
+    check(receiver_type == 0 || receiver_type == 1, "gasfund.xsat::receiver_claim: invalid receiver type");
 
     name reward_recipient;
     string memo;
@@ -108,6 +109,7 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
         reward_recipient = validator_itr->reward_recipient;
         memo = validator_itr->memo;
     } else {
+
         pool::synchronizer_table _synchronizer(POOL_REGISTER_CONTRACT, POOL_REGISTER_CONTRACT.value);
         auto synchronizer_itr =
             _synchronizer.require_find(receiver.value, "gasfund.xsat::receiver_claim: synchronizer not found");
@@ -124,7 +126,7 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
     if (memo.size() <= 12) {
         token_transfer(get_self(), reward_recipient, extended_asset(unclaimed, BTC_CONTRACT), "gasfund claim");
     } else {
-        token_transfer(get_self(), reward_recipient, extended_asset(unclaimed, BTC_CONTRACT), memo);
+        token_transfer(get_self(), reward_recipient, extended_asset(unclaimed, BTC_CONTRACT));
     }
 
     _consensus_fees_index.modify(_consensus_fees_itr, get_self(), [&](auto& row) {
