@@ -126,7 +126,7 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
     if (memo.size() <= 12) {
         token_transfer(get_self(), reward_recipient, extended_asset(unclaimed, BTC_CONTRACT), "gasfund claim");
     } else {
-        token_transfer(get_self(), reward_recipient, extended_asset(unclaimed, BTC_CONTRACT));
+        token_transfer(get_self(), memo, extended_asset(unclaimed, BTC_CONTRACT));
     }
 
     _consensus_fees_index.modify(_consensus_fees_itr, get_self(), [&](auto& row) {
