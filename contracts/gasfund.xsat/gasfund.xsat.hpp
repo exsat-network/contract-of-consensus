@@ -37,7 +37,7 @@ public:
      * - `{uint16_t} rams_reward_rate` - RAMS gas fee rate (2500 = 25%)
      * - `{uint16_t} distribute_min_height_interval` - Min calculate interval (2 = 2 blocks)
      * - `{uint16_t} distribute_max_height_interval` - Max distribute height interval (16 = 16 blocks)
-     * - `{uint64_t} start_distribute_height` - Start distribute height
+     * - `{uint64_t} start_distribute_height` - Start distribute height, not contain current height
      * - `{name} evm_fees_account` - EVM fees account (evmutil.xsat)
      * - `{checksum160} evm_proxy_address` - EVM proxy address
      * - `{string} enf_reward_address` - EVM reward address

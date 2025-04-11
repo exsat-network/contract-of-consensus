@@ -1,11 +1,12 @@
 #include "gasfund.xsat.hpp"
+#include <eosio/system.hpp>
+#include <btc.xsat/btc.xsat.hpp>
+#include <poolreg.xsat/poolreg.xsat.hpp>
+#include <rescmng.xsat/rescmng.xsat.hpp>
+#include <utxomng.xsat/utxomng.xsat.hpp>
 #include "../internal/defines.hpp"
 #include "../internal/safemath.hpp"
 #include "../internal/utils.hpp"
-#include <btc.xsat/btc.xsat.hpp>
-#include <eosio/system.hpp>
-#include <rescmng.xsat/rescmng.xsat.hpp>
-#include <utxomng.xsat/utxomng.xsat.hpp>
 
 /**
  * @brief Safe percentage calculation function to prevent overflow
@@ -46,12 +47,18 @@ void gasfund::config(const config_row& config) {
         check(xsat::utils::is_valid_evm_address(config.enf_reward_address),
               "gasfund.xsat::config: enf_reward_address is not a valid evm address");
     }
-    check(config.distribute_min_height_interval > 0, "gasfund.xsat::config: distribute_min_height_interval must be greater than 0");
-    check(config.distribute_max_height_interval > 0, "gasfund.xsat::config: distribute_max_height_interval must be greater than 0");
-    check(config.distribute_min_height_interval <= config.distribute_max_height_interval, "gasfund.xsat::config: distribute_min_height_interval must be less than or equal to distribute_max_height_interval");
+    check(config.distribute_min_height_interval > 0,
+          "gasfund.xsat::config: distribute_min_height_interval must be greater than 0");
+    check(config.distribute_max_height_interval > 0,
+          "gasfund.xsat::config: distribute_max_height_interval must be greater than 0");
+    check(config.distribute_min_height_interval <= config.distribute_max_height_interval,
+          "gasfund.xsat::config: distribute_min_height_interval must be less than or equal to "
+          "distribute_max_height_interval");
 
-    check(config.enf_reward_rate + config.rams_reward_rate <= RATE_BASE_10000, "gasfund.xsat::config: enf_reward_rate + rams_reward_rate must be less than or equal to 10000");
-    check(config.start_distribute_height > 840000, "gasfund.xsat::config: start_distribute_height must be greater than 0");
+    check(config.enf_reward_rate + config.rams_reward_rate <= RATE_BASE_10000,
+          "gasfund.xsat::config: enf_reward_rate + rams_reward_rate must be less than or equal to 10000");
+    check(config.start_distribute_height > 840000,
+          "gasfund.xsat::config: start_distribute_height must be greater than 0");
 
     _config.set(config, get_self());
 }
@@ -90,10 +97,23 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
         _consensus_fees_index.require_find(scope, "gasfund.xsat::receiver_claim: consensus fees not found");
     check(_consensus_fees_itr->unclaimed.amount > 0, "gasfund.xsat::receiver_claim: no unclaimed reward");
 
+    name reward_recipient;
+    string memo;
     // send to validator reward address
-    endorse_manage::validator_table _validator =
-        endorse_manage::validator_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
-    auto validator_itr = _validator.require_find(receiver.value, "gasfund.xsat::receiver_claim: validator not found");
+    if (receiver_type == 0) {
+        endorse_manage::validator_table _validator =
+            endorse_manage::validator_table(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+        auto validator_itr =
+            _validator.require_find(receiver.value, "gasfund.xsat::receiver_claim: validator not found");
+        reward_recipient = validator_itr->reward_recipient;
+        memo = validator_itr->memo;
+    } else {
+        pool::synchronizer_table _synchronizer(POOL_REGISTER_CONTRACT, POOL_REGISTER_CONTRACT.value);
+        auto synchronizer_itr =
+            _synchronizer.require_find(receiver.value, "gasfund.xsat::receiver_claim: synchronizer not found");
+        reward_recipient = synchronizer_itr->reward_recipient;
+        memo = synchronizer_itr->memo;
+    }
 
     auto _feestat_itr = _fees_stat.get_or_default();
     auto unclaimed = _consensus_fees_itr->unclaimed;
@@ -101,10 +121,10 @@ asset gasfund::receiver_claim(const name& receiver, const uint8_t receiver_type)
           "gasfund.xsat::receiver_claim: consensus unclaimed is less than receiver unclaimed");
 
     // transfer to validator reward address
-    if (validator_itr->memo.size() <= 12) {
-        token_transfer(get_self(), validator_itr->reward_recipient, extended_asset(unclaimed, BTC_CONTRACT), "gasfund claim");
+    if (memo.size() <= 12) {
+        token_transfer(get_self(), reward_recipient, extended_asset(unclaimed, BTC_CONTRACT), "gasfund claim");
     } else {
-        token_transfer(get_self(), validator_itr->memo, extended_asset(unclaimed, BTC_CONTRACT));
+        token_transfer(get_self(), reward_recipient, extended_asset(unclaimed, BTC_CONTRACT), memo);
     }
 
     _consensus_fees_index.modify(_consensus_fees_itr, get_self(), [&](auto& row) {
@@ -132,7 +152,7 @@ void gasfund::distribute() {
           "gasfund.xsat::distribute: current height is less than start distribute height");
 
     auto _feestat = _fees_stat.get_or_default();
-    auto start_height = _feestat.last_height > 0 ? _feestat.last_height: config.start_distribute_height;
+    auto start_height = _feestat.last_height > 0 ? _feestat.last_height : config.start_distribute_height;
     auto end_height = chain_state.irreversible_height;
     auto min_height = start_height + config.distribute_min_height_interval;
     auto max_height = start_height + config.distribute_max_height_interval;
