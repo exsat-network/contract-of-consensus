@@ -35,6 +35,9 @@ void gasfund::config(const config_row& config) {
         check(is_account(name(config.rams_reward_address)),
               "gasfund.xsat::config: rams_reward_address is not an account");
     } else {
+        // must start with 0x
+        check(config.rams_reward_address.starts_with("0x"),
+              "gasfund.xsat::config: rams_reward_address must start with 0x if it's a evm address");
         check(xsat::utils::is_valid_evm_address(config.rams_reward_address),
               "gasfund.xsat::config: rams_reward_address is not a valid evm address");
     }
@@ -44,6 +47,10 @@ void gasfund::config(const config_row& config) {
         check(is_account(name(config.enf_reward_address)),
               "gasfund.xsat::config: enf_reward_address is not an account");
     } else {
+
+        // must start with 0x
+        check(config.enf_reward_address.starts_with("0x"),
+              "gasfund.xsat::config: enf_reward_address must start with 0x if it's a evm address");
         check(xsat::utils::is_valid_evm_address(config.enf_reward_address),
               "gasfund.xsat::config: enf_reward_address is not a valid evm address");
     }
