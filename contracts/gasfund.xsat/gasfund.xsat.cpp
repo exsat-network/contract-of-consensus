@@ -557,7 +557,13 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
     if (memo != GASFUND_MEMO) {
         return;
     }
+
     auto config = _config.get_or_default();
+    // Only handle evm fees transfer from evm_fees_account
+    if (config.evm_fees_account != name() && from != config.evm_fees_account) {
+
+        return;
+    }
     auto _feestat = _fees_stat.get_or_default();
 
     // chain state
