@@ -1607,7 +1607,7 @@ void endorse_manage::setstakebase(const asset& xsat_base_stake, const asset& btc
 }
 
 [[eosio::action]]
-void endorse_manage::updcreditstk(const bool is_close) {
+void endorse_manage::updcreditstk(const bool is_close, const name& validator) {
     require_auth(get_self());
 
     block_endorse::config_table _blkconfig(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
@@ -1616,79 +1616,67 @@ void endorse_manage::updcreditstk(const bool is_close) {
 
     auto evm_staker_idx = _evm_stake.get_index<"byvalidator"_n>();
     // collect validator keys
-    std::vector<uint64_t> keys;
-    for (auto itr = _validator.begin(); itr != _validator.end(); ++itr) {
-        keys.push_back(itr->primary_key());
-    }
-    // process validator
-    for (auto id : keys) {
-        auto validator_itr = _validator.find(id);
-        if (validator_itr == _validator.end()) {
-            continue; // 
-        }
+    auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::updcreditstk validator not found");
 
-        // if xsat validator, skip
-        if (validator_itr->role.has_value() && validator_itr->role.value() == 1) {
-            continue;
-        }
+   // if xsat validator, skip
+   check(!validator_itr->role.has_value() || validator_itr->role.value() == 0, "only btc validator can update");
 
-        int active = 0;
-        asset quantity = asset{0, BTC_SYMBOL};
-        asset qualification = asset{0, BTC_SYMBOL};
+   int active = 0;
+   asset quantity = asset{0, BTC_SYMBOL};
+   asset qualification = asset{0, BTC_SYMBOL};
 
-        // get stake address from memo
-        checksum160 stake_address = validator_itr->stake_address.has_value() ? validator_itr->stake_address.value():xsat::utils::evm_address_to_checksum160(validator_itr->memo);
+   // get stake address from memo
+   checksum160 stake_address = validator_itr->stake_address.has_value() ? validator_itr->stake_address.value():xsat::utils::evm_address_to_checksum160(validator_itr->memo);
 
-        auto lb = evm_staker_idx.lower_bound(validator_itr->owner.value);
-        auto ub = evm_staker_idx.upper_bound(validator_itr->owner.value);
-        while (lb != ub) {
-            quantity += lb->quantity;
-            // if close, and stake address is the same, then add qualification
-            if (is_close) {
-                auto is_deposit = config.btc_deposit_proxy.has_value() && lb->proxy == config.btc_deposit_proxy.value();
-                if (lb->staker == stake_address && is_deposit) {
-                    qualification += lb->quantity;
-                }
-            }else {
-                // if not close, then add all stake quantity
-                qualification += lb->quantity;
-            }
-            lb++;
-        }
+   auto lb = evm_staker_idx.lower_bound(validator_itr->owner.value);
+   auto ub = evm_staker_idx.upper_bound(validator_itr->owner.value);
+   while (lb != ub) {
+       quantity += lb->quantity;
+       // if close, and stake address is the same, then add qualification
+       if (is_close) {
+           auto is_deposit = config.btc_deposit_proxy.has_value() && lb->proxy == config.btc_deposit_proxy.value();
+           if (lb->staker == stake_address && is_deposit) {
+               qualification += lb->quantity;
+           }
+       }else {
+           // if not close, then add all stake quantity
+           qualification += lb->quantity;
+       }
+       lb++;
+   }
 
-        if (qualification >= blkconfig.get_btc_base_stake()) {
-            active = 1;
-        }
+   if (qualification >= blkconfig.get_btc_base_stake()) {
+       active = 1;
+   }
 
-        // if stake address is set, modify
-        if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() != checksum160()) {
-            _validator.modify(validator_itr, get_self(), [&](auto& row) {
-                row.role = 0;
-                if (!row.reward_address.has_value() || row.reward_address.value() == checksum160()) {
-                    row.reward_address = stake_address;
-                }
-                row.active_flag = active;
-                row.donate_rate = 0;
-                row.qualification = qualification;
-                row.quantity = quantity;
-            });
-        } else {
-            // copy current record to new_validator, then delete old record, and insert new record
-            auto new_validator = *validator_itr;
-            new_validator.role = 0;
-            new_validator.donate_rate = 0;
-            new_validator.active_flag = active;
-            new_validator.qualification = qualification;
-            new_validator.quantity = quantity;
-            if (!new_validator.reward_address.has_value() || new_validator.reward_address.value() == checksum160()) {
-                new_validator.reward_address = stake_address;
-            }
-            new_validator.stake_address = stake_address;
-            _validator.erase(validator_itr);
-            _validator.emplace(get_self(), [&](auto& row) {
-                row = new_validator;
-            });
-        }
+   // if stake address is set, modify
+   if (validator_itr->stake_address.has_value() && validator_itr->stake_address.value() != checksum160()) {
+       _validator.modify(validator_itr, get_self(), [&](auto& row) {
+           row.role = 0;
+           if (!row.reward_address.has_value() || row.reward_address.value() == checksum160()) {
+               row.reward_address = stake_address;
+           }
+           row.active_flag = active;
+           row.donate_rate = 0;
+           row.qualification = qualification;
+           row.quantity = quantity;
+       });
+   } else {
+       // copy current record to new_validator, then delete old record, and insert new record
+       auto new_validator = *validator_itr;
+       new_validator.role = 0;
+       new_validator.donate_rate = 0;
+       new_validator.active_flag = active;
+       new_validator.qualification = qualification;
+       new_validator.quantity = quantity;
+       if (!new_validator.reward_address.has_value() || new_validator.reward_address.value() == checksum160()) {
+           new_validator.reward_address = stake_address;
+       }
+       new_validator.stake_address = stake_address;
+       _validator.erase(validator_itr);
+       _validator.emplace(get_self(), [&](auto& row) {
+           row = new_validator;
+       });
     }
 }
 

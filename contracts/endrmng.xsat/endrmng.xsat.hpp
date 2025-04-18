@@ -1181,7 +1181,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     void setstakebase(const asset& xsat_base_stake, const asset& btc_base_stake);
 
     [[eosio::action]]
-    void updcreditstk(const bool is_close);
+    void updcreditstk(const bool is_close, const name& validator);
 
     [[eosio::action]]
     void endorse(const name& validator, const uint64_t height);
