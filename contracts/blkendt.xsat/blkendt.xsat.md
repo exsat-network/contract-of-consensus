@@ -49,15 +49,28 @@ $ cleos get table blkendt.xsat <height> endorsements --index 2 --key-type sha256
   - [scope `height`](#scope-height)
   - [params](#params-1)
   - [example](#example-3)
-- [ACTION `config`](#action-config)
+- [TABLE `revote_record`](#table-revote_record)
+  - [scope `get_self()`](#scope-get_self-1)
   - [params](#params-2)
   - [example](#example-4)
-- [ACTION `endorse`](#action-endorse)
+- [ACTION `config`](#action-config)
   - [params](#params-3)
   - [example](#example-5)
-- [ACTION `erase`](#action-erase)
+- [ACTION `endorse`](#action-endorse)
   - [params](#params-4)
   - [example](#example-6)
+- [ACTION `erase`](#action-erase)
+  - [params](#params-5)
+  - [example](#example-7)
+- [ACTION `revote`](#action-revote)
+  - [params](#params-6)
+  - [example](#example-8)
+- [ACTION `setqualify`](#action-setqualify)
+  - [params](#params-7)
+  - [example](#example-9)
+- [ACTION `setconheight`](#action-setconheight)
+  - [params](#params-8)
+  - [example](#example-10)
 
 ## STRUCT `requested_validator_info`
 
@@ -99,7 +112,10 @@ $ cleos get table blkendt.xsat <height> endorsements --index 2 --key-type sha256
 - `{uint16_t} min_validators` - the minimum number of validators, which limits the number of validators that pledge more than 100 BTC at the time of first endorsement.
 - `{uint16_t} consensus_interval_seconds` - the interval in seconds between consensus rounds.
 - `{uint64_t} xsat_stake_activation_height` - block height at which XSAT staking feature is activated
-
+- `{asset} min_xsat_qualification` - minimum XSAT amount required for qualification
+- `{asset} min_btc_qualification` - minimum BTC amount required for qualification
+- `{uint64_t} xsat_reward_height` - block height at which XSAT rewards are activated
+- `{uint64_t} validator_active_vote_count` - count of active validator votes
 ### example
 
 ```json
@@ -144,6 +160,31 @@ $ cleos get table blkendt.xsat <height> endorsements --index 2 --key-type sha256
       "created_at": "2024-08-13T00:00:00"
      }
   ]
+}
+```
+
+## TABLE `revote_record`
+
+### scope `get_self()`
+### params
+
+- `{uint64_t} id` - primary key
+- `{uint64_t} height` - height
+- `{std::vector<name>} synchronizers` - synchronizers
+- `{uint8_t} status` - status
+- `{time_point_sec} created_at` - created at time
+- `{time_point_sec} updated_at` - updated at time
+
+### example
+
+```json
+{
+  "id": 0,
+  "height": 840000,
+  "synchronizers": ["alice", "bob"],
+  "status": 0,
+  "created_at": "2024-08-13T00:00:00",
+  "updated_at": "2024-08-13T00:00:00"
 }
 ```
 
@@ -199,4 +240,55 @@ $ cleos push action blkendt.xsat endorse '["alice", 840000, "0000000000000000000
 
 ```bash
 $ cleos push action blkendt.xsat erase '[840000]' -p utxomng.xsat
+```
+
+## ACTION `revote`
+
+- **authority**: `synchronizer`
+
+> To initiate a revote for a specific height
+
+### params
+
+- `{name} synchronizer` - synchronizer account
+- `{uint64_t} height` - height
+
+### example
+
+```bash
+$ cleos push action blkendt.xsat revote '["alice", 840000]' -p alice
+```
+
+## ACTION `setqualify`
+
+- **authority**: `endrmng.xsat` or `get_self()`
+
+> Set the minimum pledge amount of xast to become a validator
+
+### params
+
+- `{asset} min_xsat_qualification` - the minimum pledge amount of xast to become a validator
+- `{asset} min_btc_qualification` - the minimum pledge amount of btc to become a validator
+
+### example
+
+```bash
+$ cleos push action blkendt.xsat setqualify '["21000.00000000 XSAT", "100.00000000 BTC"]' -p endrmng.xsat
+```
+
+## ACTION `setconheight`
+
+- **authority**: `get_self()`
+
+> Set the XSAT stake activation height and XSAT reward height
+
+### params
+
+- `{uint64_t} xsat_stake_activation_height` - block height at which XSAT staking feature is activated
+- `{uint64_t} xsat_reward_height` - block height at which XSAT reward feature is activated
+
+### example
+
+```bash
+$ cleos push action blkendt.xsat setconheight '[860000, 870000]' -p blkendt.xsat
 ```

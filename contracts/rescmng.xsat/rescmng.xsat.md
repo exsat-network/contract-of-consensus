@@ -51,22 +51,30 @@ $ cleos get table rescmng.xsat rescmng.xsat accounts
   - [scope `get_self()`](#scope-get_self-1)
   - [params](#params-2)
   - [example](#example-2)
-- [ACTION `checkclient`](#action-checkclient)
+- [TABLE `heartbeats`](#table-heartbeats)
+  - [scope `get_self()`](#scope-get_self-2)
   - [params](#params-3)
-  - [result](#result)
   - [example](#example-3)
-- [ACTION `init`](#action-init)
+- [TABLE `feestats`](#table-feestats)
+  - [scope `get_self()`](#scope-get_self-3)
   - [params](#params-4)
   - [example](#example-4)
-- [ACTION `setstatus`](#action-setstatus)
+- [ACTION `checkclient`](#action-checkclient)
   - [params](#params-5)
+  - [result](#result)
   - [example](#example-5)
-- [ACTION `pay`](#action-pay)
+- [ACTION `init`](#action-init)
   - [params](#params-6)
   - [example](#example-6)
-- [ACTION `withdraw`](#action-withdraw)
+- [ACTION `setstatus`](#action-setstatus)
   - [params](#params-7)
   - [example](#example-7)
+- [ACTION `pay`](#action-pay)
+  - [params](#params-8)
+  - [example](#example-8)
+- [ACTION `withdraw`](#action-withdraw)
+  - [params](#params-9)
+  - [example](#example-9)
 
 ## ENUM `fee_type`
 ```
@@ -156,6 +164,29 @@ static constexpr fee_type PARSE = 5;
  "type": 1,
  "version": "v1.0.0",
  "last_heartbeat": "2024-08-13T00:00:00",
+}
+```
+
+## TABLE `feestats`
+
+### scope `get_self()`
+### params
+
+- `{uint64_t} height` - block height
+- `{asset} blkent_fee` - fee from blkent.xsat contract
+- `{asset} blksync_fee` - fee from blksync.xsat contract 
+- `{asset} utxomng_fee` - fee from utxomng.xsat contract
+- `{asset} total_fee` - total fee amount
+
+### example
+
+```json
+{
+  "height": 840000,
+  "blkent_fee": "0.00000100 BTC",
+  "blksync_fee": "0.00000200 BTC", 
+  "utxomng_fee": "0.00000300 BTC",
+  "total_fee": "0.00000600 BTC"
 }
 ```
 
