@@ -421,15 +421,17 @@ gasfund::reward_calculation_result gasfund::calculate_reward(uint64_t height) {
     check(_reward_log_itr != _reward_log.end(),
           "gasfund.xsat::calculate_reward: BTC reward log not found for height " + std::to_string(height));
 
-    // Check XSAT reward log
-    auto _xsat_reward_log_itr = _xsat_reward_log.find(height);
-    check(_xsat_reward_log_itr != _xsat_reward_log.end(),
-          "gasfund.xsat::calculate_reward: XSAT reward log not found for height " + std::to_string(height));
-
     // Calculate rewards from both logs
     uint64_t sync_reward = _reward_log_itr->synchronizer_rewards.amount;
     uint64_t staking_reward = _reward_log_itr->staking_rewards.amount;
-    uint64_t consensus_reward = _xsat_reward_log_itr->consensus_rewards.amount;
+    uint64_t consensus_reward = 0;
+
+    // Check XSAT reward log
+    auto _xsat_reward_log_itr = _xsat_reward_log.find(height);
+    if (_xsat_reward_log_itr != _xsat_reward_log.end()) {
+
+        consensus_reward = _xsat_reward_log_itr->consensus_rewards.amount;
+    }
 
     // Prepare result structure
     reward_calculation_result result;
