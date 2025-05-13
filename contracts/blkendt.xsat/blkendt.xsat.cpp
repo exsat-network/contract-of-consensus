@@ -12,7 +12,9 @@
 //@auth utxomng.xsat
 [[eosio::action]]
 void block_endorse::erase(const uint64_t height) {
-    require_auth(UTXO_MANAGE_CONTRACT);
+    if (!has_auth(UTXO_MANAGE_CONTRACT)) {
+        require_auth(get_self());
+    }
 
     block_endorse::endorsement_table _endorsement(get_self(), height);
     auto endorsement_itr = _endorsement.begin();
@@ -23,10 +25,8 @@ void block_endorse::erase(const uint64_t height) {
     // check xsat consensus active
     block_endorse::endorsement_table _xsat_endorsement(get_self(), height | XSAT_SCOPE_MASK);
     auto xsat_endorsement_itr = _xsat_endorsement.begin();
-    auto limit = 1024;
-    while (xsat_endorsement_itr != _xsat_endorsement.end() && limit > 0) {
+    while (xsat_endorsement_itr != _xsat_endorsement.end()) {
         xsat_endorsement_itr = _xsat_endorsement.erase(xsat_endorsement_itr);
-        limit--;
     }
 }
 
