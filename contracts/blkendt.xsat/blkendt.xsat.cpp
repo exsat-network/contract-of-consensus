@@ -19,6 +19,15 @@ void block_endorse::erase(const uint64_t height) {
     while (endorsement_itr != _endorsement.end()) {
         endorsement_itr = _endorsement.erase(endorsement_itr);
     }
+
+    // check xsat consensus active
+    block_endorse::endorsement_table _xsat_endorsement(get_self(), height | XSAT_SCOPE_MASK);
+    auto xsat_endorsement_itr = _xsat_endorsement.begin();
+    auto limit = 1024;
+    while (xsat_endorsement_itr != _xsat_endorsement.end() && limit > 0) {
+        xsat_endorsement_itr = _xsat_endorsement.erase(xsat_endorsement_itr);
+        limit--;
+    }
 }
 
 //@auth get_self()
