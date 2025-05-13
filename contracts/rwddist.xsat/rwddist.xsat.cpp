@@ -285,3 +285,20 @@ void reward_distribution::token_transfer(const name& from, const name& to, const
     exsat::transfer_action transfer(value.contract, {from, "active"_n});
     transfer.send(from, to, value.quantity, memo);
 }
+
+[[eosio::action]]
+void reward_distribution::delrewardlog(const uint64_t start_height, const uint64_t end_height) {
+    require_auth(get_self());
+
+    for (uint64_t height = start_height; height <= end_height; height++) {
+        auto btc_reward_log_itr = _btc_reward_log.find(height);
+        if (btc_reward_log_itr != _btc_reward_log.end()) {
+            _btc_reward_log.erase(btc_reward_log_itr);
+        }
+
+        auto xsat_reward_log_itr = _xsat_reward_log.find(height | XSAT_SCOPE_MASK);
+        if (xsat_reward_log_itr != _xsat_reward_log.end()) {
+            _xsat_reward_log.erase(xsat_reward_log_itr);
+        }
+    }
+}
