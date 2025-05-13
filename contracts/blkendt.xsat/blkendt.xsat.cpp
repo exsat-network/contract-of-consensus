@@ -131,12 +131,6 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         is_revote = true;
     }
 
-    // check xsat consensus active
-    if (config.is_xsat_consensus_active(height)) {
-
-        check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
-    }
-
     // check xsat reward active
     if (config.is_xsat_reward_active(height)) {
 
@@ -186,6 +180,12 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
                       "1008:blkendt.xsat::endorse: the next endorsement time has not yet been reached "
                           + next_endorse_time.to_string());
             }
+        }
+        
+        // check xsat consensus active
+        if (config.is_xsat_consensus_active(height)) {
+
+            check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
         }
 
         // Obtain qualified validators based on the pledge amount.
