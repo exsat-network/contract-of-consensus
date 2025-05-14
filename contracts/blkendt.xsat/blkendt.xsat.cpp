@@ -134,10 +134,13 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     // check xsat reward active
     if (config.is_xsat_reward_active(height)) {
 
-        // check consecutive vote count
-        if (validator_itr->consecutive_vote_count.has_value() && validator_itr->consecutive_vote_count.value() < validator_active_vote_count) {
-
-            // send endrmng.xsat::endorse       
+        // if validator's latest consensus block is not the current block, or the validator's consecutive vote count is not enough, send endorse
+        auto latest_consensus_block = validator_itr->latest_consensus_block.has_value() ? validator_itr->latest_consensus_block.value() : uint64_t(0);
+        auto consecutive_vote_count = validator_itr->consecutive_vote_count.has_value() ? validator_itr->consecutive_vote_count.value() : uint64_t(0);
+        if (height - latest_consensus_block > 1 || consecutive_vote_count < validator_active_vote_count) {
+                
+            check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
+            // send endrmng.xsat::endorse           
             endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
             _endorse.send(validator, height);
             return;
