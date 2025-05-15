@@ -131,22 +131,6 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         is_revote = true;
     }
 
-    // check xsat reward active
-    if (config.is_xsat_reward_active(height)) {
-
-        // if validator's latest consensus block is not the current block, or the validator's consecutive vote count is not enough, send endorse
-        auto latest_consensus_block = validator_itr->latest_consensus_block.has_value() ? validator_itr->latest_consensus_block.value() : uint64_t(0);
-        auto consecutive_vote_count = validator_itr->consecutive_vote_count.has_value() ? validator_itr->consecutive_vote_count.value() : uint64_t(0);
-        if (height - latest_consensus_block > 1 || consecutive_vote_count < validator_active_vote_count) {
-                
-            check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
-            // send endrmng.xsat::endorse           
-            endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
-            _endorse.send(validator, height);
-            return;
-        }
-    }
-
     // get endorsement scope
     bool xsat_validator = false;
     if (validator_itr->role.has_value() && validator_itr->role.value() == 1) {
@@ -167,6 +151,31 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     auto endorsement_itr = endorsement_idx.find(hash);
     bool reached_consensus = false;
     bool is_send_endorse = !is_revote;
+
+    // check validator is requested
+    auto is_requested = false;
+    if (endorsement_itr != endorsement_idx.end()) {
+        auto itr = std::find_if(endorsement_itr->requested_validators.begin(),
+                    endorsement_itr->requested_validators.end(), [&](const requested_validator_info& a) {
+                        return a.account == validator;
+                    });
+
+        if (itr != endorsement_itr->requested_validators.end()) {
+            is_requested = true;
+        }
+    }
+    
+    // if validator's latest consensus block is not the current block, or the validator's consecutive vote count is not enough, send endorse
+    auto latest_consensus_block = validator_itr->latest_consensus_block.has_value() ? validator_itr->latest_consensus_block.value() : uint64_t(0);
+    auto consecutive_vote_count = validator_itr->consecutive_vote_count.has_value() ? validator_itr->consecutive_vote_count.value() : uint64_t(0);
+    if (!is_requested && (height - latest_consensus_block > 1 || consecutive_vote_count < validator_active_vote_count)) {
+                
+        check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
+        // send endrmng.xsat::endorse           
+        endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
+        _endorse.send(validator, height);
+        return;
+    }
 
     auto err_msg = "1005:blkendt.xsat::endorse: validator not in requested_validators list";
     if (endorsement_itr == endorsement_idx.end()) {
