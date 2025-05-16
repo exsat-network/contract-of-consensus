@@ -526,6 +526,11 @@ void endorse_manage::vdrclaim(const name& validator) {
 
     auto config = _config.get();
     auto donate_rate = std::max(config.min_donate_rate.value_or(uint16_t(0)), validator_itr->donate_rate);
+    // xsat validator donate default donate_rate
+    if (validator_itr->role.has_value() && validator_itr->role.value() == 1) {
+
+        donate_rate = validator_itr->donate_rate;
+    }
 
     auto donated_amount = claimable * donate_rate / RATE_BASE_10000;
     auto to_validator = claimable - donated_amount;

@@ -6,17 +6,17 @@
 
 | name                                                  | description                    | docs                                                              |
 | ----------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------- |
-| [btc.xsat](https://bloks.io/account/btc.xsat)         | BTC Token Contract             |                                                                   |
-| [xsat.xsat](https://bloks.io/account/xsat.xsat)       | XSAT Contract                  |                                                                   |
-| [poolreg.xsat](https://bloks.io/account/poolreg.xsat) | Pool Register Contract         | [poolreg.xsat document](./contracts/poolreg.xsat/poolreg.xsat.md) |
-| [rescmng.xsat](https://bloks.io/account/rescmng.xsat) | Resource Manage Contract       | [rescmng.xsat document](./contracts/rescmng.xsat/rescmng.xsat.md) |
-| [utxomng.xsat](https://bloks.io/account/utxomng.xsat) | UTXO Manage Contract           | [utxomng.xsat document](./contracts/utxomng.xsat/utxomng.xsat.md) |
-| [rwddist.xsat](https://bloks.io/account/rwddist.xsat) | Reward Distribution Contract   | [rwddist.xsat document](./contracts/rwddist.xsat/rwddist.xsat.md) |
-| [blkendt.xsat](https://bloks.io/account/blkendt.xsat) | Block Consensus Contract       | [blkendt.xsat document](./contracts/blkendt.xsat/blkendt.xsat.md) |
-| [blksync.xsat](https://bloks.io/account/blksync.xsat) | Block Synchronization Contract | [blksync.xsat document](./contracts/blksync.xsat/blksync.xsat.md) |
-| [endrmng.xsat](https://bloks.io/account/endrmng.xsat) | Validator Manage Contract      | [endrmng.xsat document](./contracts/endrmng.xsat/endrmng.xsat.md) |
-| [staking.xsat](https://bloks.io/account/staking.xsat) | Staking Contract               | [staking.xsat document](./contracts/staking.xsat/staking.xsat.md) |
-| [custody.xsat](https://bloks.io/account/custody.xsat) | Custody Contract               | [custody.xsat document](./contracts/custody.xsat/custody.xsat.md) |
+| [btc.xsat](https://eosauthority.com/account/btc.xsat)         | BTC Token Contract             |                                                                   |
+| [exsat.xsat](https://eosauthority.com/account/exsat.xsat)       | XSAT Contract                  |                                                                   |
+| [poolreg.xsat](https://eosauthority.com/account/poolreg.xsat) | Pool Register Contract         | [poolreg.xsat document](./contracts/poolreg.xsat/poolreg.xsat.md) |
+| [rescmng.xsat](https://eosauthority.com/account/rescmng.xsat) | Resource Manage Contract       | [rescmng.xsat document](./contracts/rescmng.xsat/rescmng.xsat.md) |
+| [utxomng.xsat](https://eosauthority.com/account/utxomng.xsat) | UTXO Manage Contract           | [utxomng.xsat document](./contracts/utxomng.xsat/utxomng.xsat.md) |
+| [rwddist.xsat](https://eosauthority.com/account/rwddist.xsat) | Reward Distribution Contract   | [rwddist.xsat document](./contracts/rwddist.xsat/rwddist.xsat.md) |
+| [blkendt.xsat](https://eosauthority.com/account/blkendt.xsat) | Block Consensus Contract       | [blkendt.xsat document](./contracts/blkendt.xsat/blkendt.xsat.md) |
+| [blksync.xsat](https://eosauthority.com/account/blksync.xsat) | Block Synchronization Contract | [blksync.xsat document](./contracts/blksync.xsat/blksync.xsat.md) |
+| [endrmng.xsat](https://eosauthority.com/account/endrmng.xsat) | Validator Manage Contract      | [endrmng.xsat document](./contracts/endrmng.xsat/endrmng.xsat.md) |
+| [staking.xsat](https://eosauthority.com/account/staking.xsat) | Staking Contract               | [staking.xsat document](./contracts/staking.xsat/staking.xsat.md) |
+| [custody.xsat](https://eosauthority.com/account/custody.xsat) | Custody Contract               | [custody.xsat document](./contracts/custody.xsat/custody.xsat.md) |
 
 ## Contract Architecture
 
