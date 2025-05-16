@@ -155,14 +155,10 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     // check validator is requested
     auto is_requested = false;
     if (endorsement_itr != endorsement_idx.end()) {
-        auto itr = std::find_if(endorsement_itr->requested_validators.begin(),
+        is_requested = std::any_of(endorsement_itr->requested_validators.begin(),
                     endorsement_itr->requested_validators.end(), [&](const requested_validator_info& a) {
                         return a.account == validator;
                     });
-
-        if (itr != endorsement_itr->requested_validators.end()) {
-            is_requested = true;
-        }
     }
     
     // if validator's latest consensus block is not the current block, or the validator's consecutive vote count is not enough, send endorse
