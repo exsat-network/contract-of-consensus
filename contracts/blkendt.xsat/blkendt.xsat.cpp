@@ -153,13 +153,17 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     bool is_send_endorse = !is_revote;
 
     // check validator is requested
-    auto is_requested = false;
+    std::vector<requested_validator_info> requested_validators;
     if (endorsement_itr != endorsement_idx.end()) {
-        is_requested = std::any_of(endorsement_itr->requested_validators.begin(),
-                    endorsement_itr->requested_validators.end(), [&](const requested_validator_info& a) {
-                        return a.account == validator;
-                    });
+        requested_validators = endorsement_itr->requested_validators;
+
+    }else{
+        requested_validators = xsat_validator ? get_valid_validator_by_xsat_stake(height, validator_active_vote_count)
+                                    : get_valid_validator_by_btc_stake(height, validator_active_vote_count);
     }
+    auto is_requested = std::any_of(requested_validators.begin(), requested_validators.end(), [&](const requested_validator_info& a) {
+        return a.account == validator;
+    });
     
     // if validator's latest consensus block is not the current block, or the validator's consecutive vote count is not enough, send endorse
     auto latest_consensus_block = validator_itr->latest_consensus_block.has_value() ? validator_itr->latest_consensus_block.value() : uint64_t(0);
@@ -197,9 +201,9 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
 
         // Obtain qualified validators based on the pledge amount.
         // If the block height of the activated xsat pledge amount is reached, directly switch to xsat pledge, otherwise use the btc pledge amount.
-        std::vector<requested_validator_info> requested_validators
-            = xsat_validator ? get_valid_validator_by_xsat_stake(height, validator_active_vote_count)
-                                : get_valid_validator_by_btc_stake(height, validator_active_vote_count);
+        // std::vector<requested_validator_info> requested_validators
+        //     = xsat_validator ? get_valid_validator_by_xsat_stake(height, validator_active_vote_count)
+        //                         : get_valid_validator_by_btc_stake(height, validator_active_vote_count);
 
         check(requested_validators.size() >= config.min_validators,
               "1004:blkendt.xsat::endorse: the number of valid validators must be greater than or equal to "
