@@ -165,9 +165,15 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         return a.account == validator;
     });
     
-    // if validator's latest consensus block is not the current block, or the validator's consecutive vote count is not enough, send endorse
     auto latest_consensus_block = validator_itr->latest_consensus_block.has_value() ? validator_itr->latest_consensus_block.value() : uint64_t(0);
-    if (!is_requested && config.is_xsat_reward_active(height) && height > latest_consensus_block) {
+    // Not in request list
+    if (!is_requested && 
+        // XSAT reward active
+        config.is_xsat_reward_active(height) && 
+        // latest consensus block is not the current block
+        height > latest_consensus_block && 
+        // validator's consecutive vote count is not enough
+        height - chain_state.head_height >= validator_active_vote_count) {
                 
         check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
         // send endrmng.xsat::endorse           
