@@ -1628,8 +1628,8 @@ void endorse_manage::updcreditstk(const bool is_close, const name& validator) {
     // process validator
     auto validator_itr = _validator.find(validator.value);
 
-    // if xsat validator, skip
-    check(validator_itr->role.has_value() && validator_itr->role.value() == 1, "endrmng.xsat::updcreditstk: validator is not xsat validator");
+   // if xsat validator, skip
+    check(!validator_itr->role.has_value() || validator_itr->role.value() == 0, "endrmng.xsat::updcreditstk: only btc validator can update");
 
     int active = 0;
     asset quantity = asset{0, BTC_SYMBOL};
