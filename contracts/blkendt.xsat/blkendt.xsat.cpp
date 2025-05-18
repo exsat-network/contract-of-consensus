@@ -172,8 +172,6 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         config.is_xsat_reward_active(height) && 
         // validator active vote count is greater than 0
         validator_active_vote_count > 0 &&
-        // endorse height is less than or equal to current head height
-        height <= chain_state.head_height &&
         // latest consensus block is not the current block
         height > latest_consensus_block) { 
                 
