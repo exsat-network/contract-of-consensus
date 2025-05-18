@@ -176,7 +176,7 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         height > latest_consensus_block) { 
                 
         check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
-        check(height - chain_state.head_height  <= validator_active_vote_count, "1009:blkendt.xsat::endorse: endorse height must be greater than or equal current head height");
+        check(height - chain_state.head_height  <= (validator_active_vote_count - 1), "1009:blkendt.xsat::endorse: endorse height must be greater than or equal current head height");
 
         // send endrmng.xsat::endorse           
         endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
