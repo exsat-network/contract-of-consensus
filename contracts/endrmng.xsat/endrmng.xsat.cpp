@@ -1612,7 +1612,7 @@ void endorse_manage::setstakebase(const asset& xsat_base_stake, const asset& btc
 }
 
 [[eosio::action]]
-void endorse_manage::updcreditstk(const bool is_close, const name& validator) {
+void endorse_manage::updcreditstk(const name& validator, const bool is_close) {
     require_auth(get_self());
 
     block_endorse::config_table _blkconfig(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
@@ -1626,7 +1626,7 @@ void endorse_manage::updcreditstk(const bool is_close, const name& validator) {
         keys.push_back(itr->primary_key());
     }
     // process validator
-    auto validator_itr = _validator.find(validator.value);
+    auto validator_itr = _validator.require_find(validator.value, "endrmng.xsat::updcreditstk: [validators] does not exists");
 
    // if xsat validator, skip
     check(!validator_itr->role.has_value() || validator_itr->role.value() == 0, "endrmng.xsat::updcreditstk: only btc validator can update");
