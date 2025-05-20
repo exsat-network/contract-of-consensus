@@ -1,0 +1,13 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+AllowShortFunctionsOnASingleLine: None
+BreakBeforeBraces: Attach
+NamespaceIndentation: All
+IndentCaseLabels: true
+PointerAlignment: Left
+AccessModifierOffset: -4
+--- 
