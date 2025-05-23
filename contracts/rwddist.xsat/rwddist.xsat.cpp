@@ -2,6 +2,7 @@
 #include <exsat.xsat/exsat.xsat.hpp>
 #include <rwddist.xsat/rwddist.xsat.hpp>
 #include <utxomng.xsat/utxomng.xsat.hpp>
+#include <gasfund.xsat/gasfund.xsat.hpp>
 
 #ifdef DEBUG
 #include "./src/debug.hpp"
@@ -289,6 +290,13 @@ void reward_distribution::token_transfer(const name& from, const name& to, const
 [[eosio::action]]
 void reward_distribution::delrewardlog(const uint64_t start_height, const uint64_t end_height) {
     require_auth(get_self());
+
+    check(start_height <= end_height, "rwddist.xsat::delrewardlog: start_height must be less than or equal to end_height");
+
+    // read gasfund.xsat::config
+    gasfund::fees_stat_table _fees_stat(GAS_FUND_CONTRACT, GAS_FUND_CONTRACT.value);
+    auto _fees_state = _fees_stat.get_or_default();
+    check(_fees_state.last_height >= start_height, "rwddist.xsat::delrewardlog: start_height must be greater than or equal to gasfund.xsat::fees_stat::last_height");
 
     for (uint64_t height = start_height; height <= end_height; height++) {
         auto btc_reward_log_itr = _btc_reward_log.find(height);

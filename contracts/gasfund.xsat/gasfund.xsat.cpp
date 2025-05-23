@@ -65,7 +65,7 @@ void gasfund::config(const config_row& config) {
     check(config.enf_reward_rate + config.rams_reward_rate <= RATE_BASE_10000,
           "gasfund.xsat::config: enf_reward_rate + rams_reward_rate must be less than or equal to 10000");
     check(config.start_distribute_height > 840000,
-          "gasfund.xsat::config: start_distribute_height must be greater than 0");
+          "gasfund.xsat::config: start_distribute_height must be greater than 840000");
 
     _config.set(config, get_self());
 }
