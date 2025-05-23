@@ -259,6 +259,14 @@ public:
     void evmramsclaim(const name& caller, const checksum160& proxy_address, const checksum160& sender);
 
     /**
+     * @brief Delete distribution details for a specific height
+     * 
+     * @param start_height The start height of the distribution to delete
+     */
+    [[eosio::action]]
+    void deldistribut(uint64_t start_height);
+
+    /**
      * @brief Set configuration
      *
      * @param config Configuration
@@ -334,6 +342,11 @@ public:
         require_auth(get_self());
     };
 
+    [[eosio::action]]
+    void deldistlog(const uint64_t& start_height, const time_point_sec& delete_time) {
+        require_auth(get_self());
+    };
+
     using config_action = eosio::action_wrapper<"config"_n, &gasfund::config>;
     using distribute_action = eosio::action_wrapper<"distribute"_n, &gasfund::distribute>;
     using claim_action = eosio::action_wrapper<"claim"_n, &gasfund::claim>;
@@ -350,6 +363,7 @@ public:
     using evmclaimlog_action = eosio::action_wrapper<"evmclaimlog"_n, &gasfund::evmclaimlog>;
     using evmenfclog_action = eosio::action_wrapper<"evmenfclog"_n, &gasfund::evmenfclog>;
     using evmramsclog_action = eosio::action_wrapper<"evmramsclog"_n, &gasfund::evmramsclog>;
+    using deldistlog_action = eosio::action_wrapper<"deldistlog"_n, &gasfund::deldistlog>;
 
 private:
     /**

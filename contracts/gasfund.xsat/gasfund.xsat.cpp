@@ -751,3 +751,28 @@ void gasfund::token_transfer(const name& from, const name& to, const extended_as
     btc::transfer_action transfer(value.contract, {from, "active"_n});
     transfer.send(from, to, value.quantity, memo);
 }
+
+void gasfund::deldistribut(uint64_t start_height) {
+    require_auth(get_self());
+
+    auto _feestat_itr = _fees_stat.get_or_default();
+    check(start_height < _feestat_itr.last_evm_height, 
+          "gasfund.xsat::deldistdetail: start_height must be less than last_evm_height");
+
+    auto _distribute_itr = _distributes.find(start_height);
+    check(_distribute_itr != _distributes.end(), 
+          "gasfund.xsat::deldistdetail: distribute record not found for height " + std::to_string(start_height));
+    
+    // delete details
+    distribute_detail_table _distribute_details(get_self(), start_height);
+    for (auto itr = _distribute_details.begin(); itr != _distribute_details.end(); itr++) {
+        _distribute_details.erase(itr);
+    }
+
+    // delete main distribute record
+    _distributes.erase(_distribute_itr);
+
+    // send log
+    gasfund::deldistlog_action _deldistlog(get_self(), {get_self(), "active"_n});
+    _deldistlog.send(start_height, current_time_point());
+}
