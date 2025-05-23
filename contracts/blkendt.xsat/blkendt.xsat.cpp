@@ -410,7 +410,7 @@ void block_endorse::revote(const name& synchronizer, const uint64_t height) {
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
     check(chain_state.irreversible_height < height && chain_state.migrating_height != height,
-          "1002:blkendt.xsat::revote: the current block is irreversible");
+          "2002:blkendt.xsat::revote: the current block is irreversible");
           
     pool::synchronizer_table _synchronizer(POOL_REGISTER_CONTRACT, POOL_REGISTER_CONTRACT.value);
     auto synchronizer_itr = _synchronizer.require_find(synchronizer.value, "block_endorse::revote: not a synchronizer account");

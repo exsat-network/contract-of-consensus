@@ -54,10 +54,10 @@ void gasfund::config(const config_row& config) {
         check(xsat::utils::is_valid_evm_address(config.enf_reward_address),
               "gasfund.xsat::config: enf_reward_address is not a valid evm address");
     }
+
+    check(config.evm_fees_account != name(), "gasfund.xsat::config: evm_fees_account must be set");
     check(config.distribute_min_height_interval > 0,
           "gasfund.xsat::config: distribute_min_height_interval must be greater than 0");
-    check(config.distribute_max_height_interval > 0,
-          "gasfund.xsat::config: distribute_max_height_interval must be greater than 0");
     check(config.distribute_min_height_interval <= config.distribute_max_height_interval,
           "gasfund.xsat::config: distribute_min_height_interval must be less than or equal to "
           "distribute_max_height_interval");
@@ -569,7 +569,7 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
 
     auto config = _config.get_or_default();
     // Only handle evm fees transfer from evm_fees_account
-    if (config.evm_fees_account != name() && from != config.evm_fees_account) {
+    if (from != config.evm_fees_account) {
 
         return;
     }
@@ -607,15 +607,11 @@ void gasfund::handle_evm_fees_transfer(const name& from, const name& to, const a
     uint64_t total_consensus_fees = (fee_sum <= quantity.amount) ? (quantity.amount - fee_sum) : 0;
     uint64_t remaining_fees = total_consensus_fees;
 
-    name last_receiver;
-    for (auto itr = _distribute_details.begin(); itr != _distribute_details.end(); ++itr) {
-        last_receiver = itr->receiver;
-    }
-
+    uint64_t last_receiver_id = _distribute_details.rbegin()->get_receiver_id();
     auto _consensus_fees_index = _consensus_fees.get_index<"byreceiver"_n>();
     for (auto itr = _distribute_details.begin(); itr != _distribute_details.end(); itr++) {
         auto _fees = safe_pct(total_consensus_fees, itr->reward.amount, total_rewards.amount);
-        if (itr->receiver == last_receiver) {
+        if (itr->get_receiver_id() == last_receiver_id) {
             _fees = remaining_fees;
         } else {
             _fees = _fees <= remaining_fees ? _fees : remaining_fees;
