@@ -445,7 +445,9 @@ gasfund::reward_calculation_result gasfund::calculate_reward(uint64_t height) {
 
     // Calculate BTC validator rewards if any
     if (staking_reward > 0) {
-        auto btc_distributions = calculate_btc_validator_rewards(_reward_log_itr, staking_reward);
+
+        auto btc_reward = staking_reward + _reward_log_itr->consensus_rewards.amount;
+        auto btc_distributions = calculate_btc_validator_rewards(_reward_log_itr, btc_reward);
         result.distributions.insert(result.distributions.end(), btc_distributions.begin(), btc_distributions.end());
     }
 
