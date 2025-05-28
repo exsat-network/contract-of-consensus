@@ -219,6 +219,9 @@ class [[eosio::contract("rwddist.xsat")]] reward_distribution : public contract 
     [[eosio::action]]
     void setrwdconfig(reward_config_row config);
 
+    [[eosio::action]]
+    void delrewardlog(const uint64_t start_height, const uint64_t end_height);
+
     void endtreward_per_symbol(const uint64_t height, uint32_t from_index, const uint32_t to_index, 
         bool is_btc_validators, reward_log_table &_reward_log, reward_balance_table &_reward_balance);
 

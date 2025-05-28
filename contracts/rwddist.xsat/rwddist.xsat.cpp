@@ -2,6 +2,7 @@
 #include <exsat.xsat/exsat.xsat.hpp>
 #include <rwddist.xsat/rwddist.xsat.hpp>
 #include <utxomng.xsat/utxomng.xsat.hpp>
+#include <gasfund.xsat/gasfund.xsat.hpp>
 
 #ifdef DEBUG
 #include "./src/debug.hpp"
@@ -284,4 +285,28 @@ void reward_distribution::endtreward_per_symbol(const uint64_t height, uint32_t 
 void reward_distribution::token_transfer(const name& from, const name& to, const extended_asset& value, const string& memo) {
     exsat::transfer_action transfer(value.contract, {from, "active"_n});
     transfer.send(from, to, value.quantity, memo);
+}
+
+[[eosio::action]]
+void reward_distribution::delrewardlog(const uint64_t start_height, const uint64_t end_height) {
+    require_auth(get_self());
+
+    check(start_height <= end_height, "rwddist.xsat::delrewardlog: start_height must be less than or equal to end_height");
+
+    // read gasfund.xsat::config
+    gasfund::fees_stat_table _fees_stat(GAS_FUND_CONTRACT, GAS_FUND_CONTRACT.value);
+    auto _fees_state = _fees_stat.get_or_default();
+    check(_fees_state.last_height >= end_height, "rwddist.xsat::delrewardlog: gasfund.xsat::fees_stat::last_height must be greater than or equal to end_height");
+
+    for (uint64_t height = start_height; height <= end_height; height++) {
+        auto btc_reward_log_itr = _btc_reward_log.find(height);
+        if (btc_reward_log_itr != _btc_reward_log.end()) {
+            _btc_reward_log.erase(btc_reward_log_itr);
+        }
+
+        auto xsat_reward_log_itr = _xsat_reward_log.find(height | XSAT_SCOPE_MASK);
+        if (xsat_reward_log_itr != _xsat_reward_log.end()) {
+            _xsat_reward_log.erase(xsat_reward_log_itr);
+        }
+    }
 }
