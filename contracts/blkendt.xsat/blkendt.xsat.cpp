@@ -329,6 +329,8 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
                 // if latest endorse block is not the current block, that mean the validator is not endorse previous block
                 // so it not consecutive endorse 
                 auto latest_consensus_block = itr->latest_consensus_block.has_value() ? itr->latest_consensus_block.value() : uint64_t(0);
+
+                //  latest_consensus_block >= height - 1
                 if (height - latest_consensus_block > 1) {
 
                     itr++;

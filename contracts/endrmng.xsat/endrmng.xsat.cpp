@@ -1240,11 +1240,14 @@ void endorse_manage::creditstake(const checksum160& proxy, const checksum160& st
     check(!validator_itr->disabled_staking,
           "endrmng.xsat::creditstake: the current validator's staking status is disabled");
 
+    auto config = _config.get_or_default();
     auto evm_staker_idx = _evm_stake.get_index<"bystakingid"_n>();
     auto stake_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
     asset old_quantity = {0, BTC_SYMBOL};
+    asset old_weight_quantity = {0, BTC_SYMBOL};
     if (stake_itr != evm_staker_idx.end()) {
         old_quantity = stake_itr->quantity;
+        old_weight_quantity = old_quantity * config.get_credit_weight() / RATE_BASE_10000;
     }
 
     if (old_quantity < quantity) {
@@ -1635,13 +1638,32 @@ void endorse_manage::updcreditstk(const name& validator, const bool is_close) {
     asset quantity = asset{0, BTC_SYMBOL};
     asset qualification = asset{0, BTC_SYMBOL};
 
+    // chain state
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
     // get stake address from memo
     checksum160 stake_address = validator_itr->stake_address.has_value() ? validator_itr->stake_address.value():xsat::utils::evm_address_to_checksum160(validator_itr->memo);
+    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
 
     auto lb = evm_staker_idx.lower_bound(validator_itr->owner.value);
     auto ub = evm_staker_idx.upper_bound(validator_itr->owner.value);
     while (lb != ub) {
-        quantity += lb->quantity;
+
+        // check if the stake is credit staking
+        auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
+        bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end(); 
+
+        // if the stake is credit staking, then add credit quantity different from the stake quantity
+        if (is_credit_staking) {
+            
+            auto weight = config.get_current_credit_weight(chain_state.head_height);
+            auto credit_quantity = lb->quantity * weight / RATE_BASE_10000;
+            quantity += credit_quantity;
+        }else{
+
+            quantity += lb->quantity;
+        }
+
         // if close, and stake address is the same, then add qualification
         if (is_close) {
             auto is_deposit = config.btc_deposit_proxy.has_value() && lb->proxy == config.btc_deposit_proxy.value();
@@ -1712,4 +1734,85 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         row.consecutive_vote_count = is_consecutive ? row.consecutive_vote_count.value_or(0ULL) + 1ULL : 1ULL;
         row.latest_consensus_block = height;
     });
+    
+    // calculate credit stake weight
+    auto config = _config.get_or_default();
+
+    if (config.get_current_credit_weight(height) == validator_itr->get_credit_weight()) {
+        return;
+    }
+
+    // if the next credit stake weight is not set, or the current block is less than the block when the next credit stake weight is set, then return
+    if (!config.next_credit_weight.has_value() ||  height < config.next_credit_weight_block.value()) {
+
+        return;
+    }
+
+    // 
+    if (validator_itr->get_credit_weight_block() >= config.next_credit_weight_block.value()) {
+
+        return;
+    }
+
+    // get all validator's evm stake
+    auto evm_staker_idx = _evm_stake.get_index<"byvalidator"_n>();
+    auto lb = evm_staker_idx.lower_bound(validator_itr->owner.value);
+    auto ub = evm_staker_idx.upper_bound(validator_itr->owner.value);
+        
+    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
+    while (lb != ub) {
+        lb++;
+
+        auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
+        auto is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+        if (!is_credit_staking) {
+            continue;
+        }
+
+        // already update credit stake weight
+        if (lb->get_credit_weight_block() >= config.get_next_credit_block()) {
+            continue;
+        }
+
+        // update credit stake weight
+        auto quantity = lb->quantity * config.credit_weight.value() / RATE_BASE_10000;
+        auto old_quantity = lb->quantity;
+            
+        if (quantity < old_quantity) {
+            asset qualification = old_quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
+            asset new_quantity = quantity - old_quantity;
+
+            asset validator_staking, validator_qualification;
+            std::tie(validator_staking, validator_qualification) = evm_stake_without_auth(lb->proxy, lb->staker, validator, new_quantity, qualification);
+
+            // log
+            endorse_manage::evmstakelog_action _evmstakelog(get_self(), {get_self(), "active"_n});
+            _evmstakelog.send(lb->proxy, lb->staker, validator, quantity, validator_staking, validator_qualification);
+        } else if (old_quantity > quantity) {
+            asset qualification = quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
+            asset new_quantity = old_quantity - quantity;
+
+            asset validator_staking, validator_qualification;
+            std::tie(validator_staking, validator_qualification) = evm_unstake_without_auth(lb->proxy, lb->staker, validator, new_quantity, qualification);
+
+            // log
+            endorse_manage::evmunstlog_action _evmunstlog(get_self(), {get_self(), "active"_n});
+            _evmunstlog.send(lb->proxy, lb->staker, validator, quantity, validator_staking, validator_qualification);
+        }
+    }
+}
+
+[[eosio::action]]
+void endorse_manage::setcreditwei(const uint64_t credit_weight, const uint64_t credit_weight_block) {
+    require_auth(get_self());
+
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+    check(credit_weight_block >= chain_state.head_height + 6, "endrmng.xsat::setcreditwei: credit_weight_block must be at least chain_state.head_height + 6");
+
+    auto config = _config.get_or_default();
+    config.next_credit_weight = credit_weight;
+    config.next_credit_weight_block = credit_weight_block;
+
+    _config.set(config, get_self());
 }

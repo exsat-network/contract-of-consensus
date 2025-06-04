@@ -65,6 +65,23 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         binary_extension<uint16_t> min_donate_rate;
         binary_extension<checksum160> btc_deposit_proxy;
         binary_extension<checksum160> xsat_deposit_proxy;
+        binary_extension<uint64_t> next_credit_weight_block;
+        binary_extension<uint16_t> next_credit_weight;
+        binary_extension<uint64_t> credit_weight;
+
+        uint64_t get_current_credit_weight(uint64_t height) const {
+
+            if (get_next_credit_block() <= height) {
+                return next_credit_weight.has_value() ? next_credit_weight.value() : RATE_BASE_10000;
+            }
+
+            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+        }
+
+        uint64_t get_next_credit_block() const {
+
+            return next_credit_weight_block.has_value() ? next_credit_weight_block.value() : 999999999999999999ULL;
+        }
     };
     typedef eosio::singleton<"config"_n, config_row> config_table;
 
@@ -202,11 +219,22 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         uint64_t consensus_debt;
         asset consensus_reward_unclaimed;
         asset consensus_reward_claimed;
+        binary_extension<uint64_t> credit_weight;
+        binary_extension<uint64_t> credit_weight_block;
         uint64_t primary_key() const { return id; }
         uint64_t by_validator() const { return validator.value; }
         checksum256 by_staker() const { return xsat::utils::compute_id(staker); }
         checksum256 by_proxy() const { return xsat::utils::compute_id(proxy); }
         checksum256 by_staking_id() const { return compute_staking_id(proxy, staker, validator); }
+
+        uint64_t get_credit_weight() const {
+
+            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+        }
+        
+        uint64_t get_credit_weight_block() const {
+            return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
+        }
     };
     typedef eosio::multi_index<
         "evmstakers"_n, evm_staker_row,
@@ -267,10 +295,15 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         uint64_t consensus_debt;
         asset consensus_reward_unclaimed;
         asset consensus_reward_claimed;
+        binary_extension<uint64_t> credit_weight_block;
         uint64_t primary_key() const { return id; }
         uint64_t by_validator() const { return validator.value; }
         uint64_t by_staker() const { return staker.value; }
         uint128_t by_staking_id() const { return compute_staking_id(staker, validator); }
+
+        uint64_t get_credit_weight_block() const {
+            return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
+        }
     };
     typedef eosio::multi_index<
         "stakers"_n, native_staker_row,
@@ -384,6 +417,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         // 0: BTC, 1: XSAT
         binary_extension<uint32_t> role;
 
+        binary_extension<uint64_t> credit_weight_block;
+        binary_extension<uint64_t> credit_weight;
+
         uint64_t get_role() const {
             return (role.has_value() && role.value() == 1) ? (XSAT_SCOPE_MASK | (owner.value >> 32)) : (owner.value >> 32);
         }
@@ -397,6 +433,13 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
             return xsat::utils::compute_id(stake_address.value_or());
         }
 
+        uint64_t get_credit_weight() const {
+            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+        }
+
+       uint64_t get_credit_weight_block() const {
+            return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
+        }
     };
     typedef eosio::multi_index<
         "validators"_n, validator_row,
@@ -1139,6 +1182,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     [[eosio::on_notify("*::transfer")]]
     void on_transfer(const name& from, const name& to, const asset& quantity, const string& memo);
+
+    [[eosio::action]]
+    void setcreditwei(const uint64_t credit_weight, const uint64_t credit_weight_block);
 
 #ifdef DEBUG
     [[eosio::action]]
