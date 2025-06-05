@@ -1800,10 +1800,11 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
 [[eosio::action]]
 void endorse_manage::setcreditwei(const uint64_t credit_weight, const uint64_t credit_weight_block) {
     require_auth(get_self());
+    check(credit_weight > 0 && credit_weight <= RATE_BASE_10000, "endrmng.xsat::setcreditwei: credit_weight must be greater than 0 and less than or equal to 10000");
 
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
-    check(credit_weight_block >= chain_state.head_height + 6, "endrmng.xsat::setcreditwei: credit_weight_block must be at least chain_state.head_height + 6");
+    check(credit_weight_block > chain_state.head_height, "endrmng.xsat::setcreditwei: credit_weight_block must be greater than current height");
 
     auto config = _config.get_or_default();
     config.next_credit_weight = credit_weight;
