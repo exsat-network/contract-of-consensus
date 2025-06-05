@@ -1795,6 +1795,12 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         row.credit_weight = current_credit_weight;
         row.credit_weight_block = height;
     });
+
+    if (!config.credit_weight.has_value() || config.credit_weight.value() != current_credit_weight) {
+
+        config.credit_weight = current_credit_weight;
+        _config.set(config, get_self());
+    }
 }
 
 [[eosio::action]]
