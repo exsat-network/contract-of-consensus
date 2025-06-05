@@ -1774,22 +1774,24 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         
     auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
     while (lb != ub) {
-        lb++;
-
         auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
         auto is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
         if (!is_credit_staking) {
+            lb++;
             continue;
         }
 
         // already update credit stake weight
         if (lb->get_credit_weight_block() >= config.get_next_credit_block()) {
+            lb++;
             continue;
         }
 
         // send action to update credit stake weight
         endorse_manage::creditstake_action _creditstake(get_self(), {get_self(), "active"_n});
         _creditstake.send(lb->proxy, lb->staker, validator, lb->quantity);
+        
+        lb++;
     }
 
     // Modify the validator's credit stake weight
