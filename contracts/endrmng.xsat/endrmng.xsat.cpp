@@ -1244,16 +1244,19 @@ void endorse_manage::creditstake(const checksum160& proxy, const checksum160& st
     auto evm_staker_idx = _evm_stake.get_index<"bystakingid"_n>();
     auto stake_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
     asset old_quantity = {0, BTC_SYMBOL};
-    asset old_weight_quantity = {0, BTC_SYMBOL};
     if (stake_itr != evm_staker_idx.end()) {
         old_quantity = stake_itr->quantity;
-        old_weight_quantity = old_quantity * config.get_credit_weight() / RATE_BASE_10000;
     }
+    
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+    uint64_t credit_weight = config.get_current_credit_weight(chain_state.head_height);
+    auto weight_quantity = quantity * credit_weight / RATE_BASE_10000;
 
-    if (old_quantity < quantity) {
+    if (old_quantity < weight_quantity) {
         asset qualification
             = old_quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
-        asset new_quantity = quantity - old_quantity;
+        asset new_quantity = weight_quantity - old_quantity;
 
         asset validator_staking, validator_qualification;
         std::tie(validator_staking, validator_qualification)
@@ -1261,11 +1264,11 @@ void endorse_manage::creditstake(const checksum160& proxy, const checksum160& st
 
         // log
         endorse_manage::evmstakelog_action _evmstakelog(get_self(), {get_self(), "active"_n});
-        _evmstakelog.send(proxy, staker, validator, quantity, validator_staking, validator_qualification);
-    } else if (old_quantity > quantity) {
+        _evmstakelog.send(proxy, staker, validator, weight_quantity, validator_staking, validator_qualification);
+    } else if (old_quantity > weight_quantity) {
         asset qualification
             = quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
-        asset new_quantity = old_quantity - quantity;
+        asset new_quantity = old_quantity - weight_quantity;
 
         asset validator_staking, validator_qualification;
         std::tie(validator_staking, validator_qualification)
@@ -1273,8 +1276,15 @@ void endorse_manage::creditstake(const checksum160& proxy, const checksum160& st
 
         // log
         endorse_manage::evmunstlog_action _evmunstlog(get_self(), {get_self(), "active"_n});
-        _evmunstlog.send(proxy, staker, validator, quantity, validator_staking, validator_qualification);
+        _evmunstlog.send(proxy, staker, validator, weight_quantity, validator_staking, validator_qualification);
     }
+
+    // update credit weight and credit weight block
+    auto _raw_stake_itr = _evm_stake.find(stake_itr->id);
+    _evm_stake.modify(_raw_stake_itr, same_payer, [&](auto& row) {
+        row.credit_weight = credit_weight;
+        row.credit_weight_block = chain_state.head_height;
+    });
 }
 
 //@auth rwddist.xsat
@@ -1737,8 +1747,9 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
     
     // calculate credit stake weight
     auto config = _config.get_or_default();
+    auto current_credit_weight = config.get_current_credit_weight(height);
 
-    if (config.get_current_credit_weight(height) == validator_itr->get_credit_weight()) {
+    if (current_credit_weight == validator_itr->get_credit_weight()) {
         return;
     }
 
@@ -1774,32 +1785,16 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
             continue;
         }
 
-        // update credit stake weight
-        auto quantity = lb->quantity * config.credit_weight.value() / RATE_BASE_10000;
-        auto old_quantity = lb->quantity;
-            
-        if (quantity < old_quantity) {
-            asset qualification = old_quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
-            asset new_quantity = quantity - old_quantity;
-
-            asset validator_staking, validator_qualification;
-            std::tie(validator_staking, validator_qualification) = evm_stake_without_auth(lb->proxy, lb->staker, validator, new_quantity, qualification);
-
-            // log
-            endorse_manage::evmstakelog_action _evmstakelog(get_self(), {get_self(), "active"_n});
-            _evmstakelog.send(lb->proxy, lb->staker, validator, quantity, validator_staking, validator_qualification);
-        } else if (old_quantity > quantity) {
-            asset qualification = quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
-            asset new_quantity = old_quantity - quantity;
-
-            asset validator_staking, validator_qualification;
-            std::tie(validator_staking, validator_qualification) = evm_unstake_without_auth(lb->proxy, lb->staker, validator, new_quantity, qualification);
-
-            // log
-            endorse_manage::evmunstlog_action _evmunstlog(get_self(), {get_self(), "active"_n});
-            _evmunstlog.send(lb->proxy, lb->staker, validator, quantity, validator_staking, validator_qualification);
-        }
+        // send action to update credit stake weight
+        endorse_manage::creditstake_action _creditstake(get_self(), {get_self(), "active"_n});
+        _creditstake.send(lb->proxy, lb->staker, validator, lb->quantity);
     }
+
+    // Modify the validator's credit stake weight
+    _validator.modify(validator_itr, get_self(), [&](auto& row) {
+        row.credit_weight = current_credit_weight;
+        row.credit_weight_block = height;
+    });
 }
 
 [[eosio::action]]
