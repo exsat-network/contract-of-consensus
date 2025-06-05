@@ -295,11 +295,16 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         uint64_t consensus_debt;
         asset consensus_reward_unclaimed;
         asset consensus_reward_claimed;
+        binary_extension<uint64_t> credit_weight;
         binary_extension<uint64_t> credit_weight_block;
         uint64_t primary_key() const { return id; }
         uint64_t by_validator() const { return validator.value; }
         uint64_t by_staker() const { return staker.value; }
         uint128_t by_staking_id() const { return compute_staking_id(staker, validator); }
+
+        uint64_t get_credit_weight() const {
+            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+        }
 
         uint64_t get_credit_weight_block() const {
             return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
