@@ -1261,9 +1261,12 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
     uint64_t credit_weight = config.get_current_credit_weight(head_height);
     auto weight_quantity = quantity * credit_weight / RATE_BASE_10000;
 
+    block_endorse::config_table _blk_config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto blk_config = _blk_config.get_or_default();
+
     if (old_quantity < weight_quantity) {
         asset qualification
-            = old_quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
+            = old_quantity.amount == 0 ? blk_config.get_btc_base_stake() : asset{0, BTC_SYMBOL};
         asset new_quantity = weight_quantity - old_quantity;
 
         asset validator_staking, validator_qualification;
@@ -1275,7 +1278,7 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         _evmstakelog.send(proxy, staker, validator, weight_quantity, validator_staking, validator_qualification);
     } else if (old_quantity > weight_quantity) {
         asset qualification
-            = quantity.amount == 0 ? asset{MIN_BTC_STAKE_FOR_VALIDATOR, BTC_SYMBOL} : asset{0, BTC_SYMBOL};
+            = quantity.amount == 0 ? blk_config.get_btc_base_stake() : asset{0, BTC_SYMBOL};
         asset new_quantity = old_quantity - weight_quantity;
 
         asset validator_staking, validator_qualification;
