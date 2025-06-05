@@ -1789,7 +1789,9 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
 
         // send action to update credit stake weight
         endorse_manage::creditstake_action _creditstake(get_self(), {get_self(), "active"_n});
-        _creditstake.send(lb->proxy, lb->staker, validator, lb->quantity);
+
+        auto raw_quantity = lb->quantity * RATE_BASE_10000 / lb->get_credit_weight();
+        _creditstake.send(lb->proxy, lb->staker, validator, raw_quantity);
         
         lb++;
     }
