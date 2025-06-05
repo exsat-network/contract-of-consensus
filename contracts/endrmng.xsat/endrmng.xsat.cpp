@@ -1230,6 +1230,14 @@ void endorse_manage::creditstake(const checksum160& proxy, const checksum160& st
         require_auth(get_self());
     }
 
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+
+    _creditstake(proxy, staker, validator, quantity, chain_state.head_height);
+}
+
+void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& staker, const name& validator, const asset& quantity, uint64_t head_height) {
+    
     auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
     auto credit_proxy_itr = credit_proxy_idx.require_find(xsat::utils::compute_id(proxy),
                                                           "endrmng.xsat::creditstake: [creditproxy] does not exist");
@@ -1250,9 +1258,7 @@ void endorse_manage::creditstake(const checksum160& proxy, const checksum160& st
         old_quantity = stake_itr->quantity;
     }
     
-    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
-    auto chain_state = _chain_state.get();
-    uint64_t credit_weight = config.get_current_credit_weight(chain_state.head_height);
+    uint64_t credit_weight = config.get_current_credit_weight(head_height);
     auto weight_quantity = quantity * credit_weight / RATE_BASE_10000;
 
     if (old_quantity < weight_quantity) {
@@ -1285,7 +1291,7 @@ void endorse_manage::creditstake(const checksum160& proxy, const checksum160& st
     auto _raw_stake_itr = _evm_stake.find(stake_itr->id);
     _evm_stake.modify(_raw_stake_itr, same_payer, [&](auto& row) {
         row.credit_weight = credit_weight;
-        row.credit_weight_block = chain_state.head_height;
+        row.credit_weight_block = head_height;
     });
 }
 
@@ -1788,10 +1794,8 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         }
 
         // send action to update credit stake weight
-        endorse_manage::creditstake_action _creditstake(get_self(), {get_self(), "active"_n});
-
         auto raw_quantity = lb->quantity * RATE_BASE_10000 / lb->get_credit_weight();
-        _creditstake.send(lb->proxy, lb->staker, validator, raw_quantity);
+        _creditstake(lb->proxy, lb->staker, validator, raw_quantity, height);
         
         lb++;
     }

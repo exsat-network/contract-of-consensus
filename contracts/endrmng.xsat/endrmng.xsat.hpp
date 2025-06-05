@@ -1475,6 +1475,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     asset get_qualification(const validator_row& validator_itr, const bool is_btc_validator, const checksum160& stake_addr);
 
+    void _creditstake(const checksum160& proxy, const checksum160& staker, const name& validator, const asset& quantity, uint64_t head_height);
 #ifdef DEBUG
     template <typename T>
     void clear_table(T& table, uint64_t rows_to_clear);
