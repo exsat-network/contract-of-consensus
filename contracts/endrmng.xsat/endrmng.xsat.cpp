@@ -1226,7 +1226,9 @@ void endorse_manage::delcrdtproxy(const checksum160& proxy) {
 [[eosio::action]]
 void endorse_manage::creditstake(const checksum160& proxy, const checksum160& staker, const name& validator,
                                  const asset& quantity) {
-    require_auth(CUSTODY_CONTRACT);
+    if (!has_auth(CUSTODY_CONTRACT)) {
+        require_auth(get_self());
+    }
 
     auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
     auto credit_proxy_itr = credit_proxy_idx.require_find(xsat::utils::compute_id(proxy),
