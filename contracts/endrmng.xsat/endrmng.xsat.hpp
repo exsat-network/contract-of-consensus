@@ -69,7 +69,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         binary_extension<uint16_t> next_credit_weight;
         binary_extension<uint64_t> credit_weight;
 
-        uint64_t get_current_credit_weight(uint64_t height) const {
+        uint64_t get_credit_weight(uint64_t height) const {
 
             if (get_next_credit_block() <= height) {
                 return next_credit_weight.has_value() ? next_credit_weight.value() : RATE_BASE_10000;

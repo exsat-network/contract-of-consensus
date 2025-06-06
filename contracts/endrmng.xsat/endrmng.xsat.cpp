@@ -307,12 +307,9 @@ void endorse_manage::claim(const name& staker, const name& validator, const uint
     auto validator_itr = _validator.require_find(native_staker_itr->validator.value,
                                                  "endrmng.xsat::claim: [validators] does not exists");
 
-    auto credit_weight = _get_current_credit_weight();
-    auto weight_quantity = native_staker_itr->quantity * credit_weight / RATE_BASE_10000;
-
     // update reward
     update_staking_reward(validator_itr->stake_acc_per_share, validator_itr->consensus_acc_per_share,
-                          weight_quantity.amount, weight_quantity.amount, native_staker_idx,
+                          native_staker_itr->quantity.amount, native_staker_itr->quantity.amount, native_staker_idx,
                           native_staker_itr);
 
     auto staking_reward_unclaimed = native_staker_itr->staking_reward_unclaimed;
@@ -450,11 +447,19 @@ void endorse_manage::evm_claim(const name& caller, const checksum160& proxy, con
     auto validator_itr = _validator.require_find(evm_staker_itr->validator.value,
                                                  "endrmng.xsat::evmclaim: [validators] does not exists");
 
-    auto credit_weight = _get_current_credit_weight();
-    auto weight_quantity = evm_staker_itr->quantity * credit_weight / RATE_BASE_10000;
+    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
+    auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
+    bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+
+    auto quantity = evm_staker_itr->quantity;
+    auto stake_amount = quantity.amount;
+    if (is_credit_staking){
+
+        auto credit_weight = _get_current_credit_weight();
+        stake_amount = stake_amount * credit_weight / RATE_BASE_10000;
+    }
     update_staking_reward(validator_itr->stake_acc_per_share, validator_itr->consensus_acc_per_share,
-                          weight_quantity.amount, weight_quantity.amount, evm_staker_idx,
-                          evm_staker_itr);
+                          stake_amount, stake_amount, evm_staker_idx, evm_staker_itr);
 
     auto staking_reward_unclaimed = evm_staker_itr->staking_reward_unclaimed;
     auto consensus_reward_unclaimed = evm_staker_itr->consensus_reward_unclaimed;
@@ -462,12 +467,8 @@ void endorse_manage::evm_claim(const name& caller, const checksum160& proxy, con
     check(claimable.amount > 0, "endrmng.xsat::evmclaim: no balance to claim");
 
     auto config = _config.get();
-
     asset validator_donated_amount = {0, XSAT_SYMBOL};
     asset staker_donated_amount = {0, XSAT_SYMBOL};
-    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
-    auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
-    bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
 
     // Use validator's donate_rate for credit staking, otherwise use input donate_rate
     if (is_credit_staking) {
@@ -483,6 +484,7 @@ void endorse_manage::evm_claim(const name& caller, const checksum160& proxy, con
         row.consensus_reward_claimed += consensus_reward_unclaimed;
         row.staking_reward_unclaimed -= staking_reward_unclaimed;
         row.consensus_reward_unclaimed -= consensus_reward_unclaimed;
+        row.quantity.amount = quantity.amount;
     });
 
     _validator.modify(validator_itr, same_payer, [&](auto& row) {
@@ -1233,7 +1235,9 @@ void endorse_manage::delcrdtproxy(const checksum160& proxy) {
 [[eosio::action]]
 void endorse_manage::creditstake(const checksum160& proxy, const checksum160& staker, const name& validator,
                                  const asset& quantity) {
-    require_auth(CUSTODY_CONTRACT);
+    if (!has_auth(get_self())){
+        require_auth(CUSTODY_CONTRACT);
+    }
 
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
@@ -1262,17 +1266,19 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
     if (stake_itr != evm_staker_idx.end()) {
         old_quantity = stake_itr->quantity;
     }
+    uint64_t credit_weight = validator_itr->get_credit_weight();
+    auto old_weight_quantity = old_quantity * credit_weight / RATE_BASE_10000;
     
-    uint64_t credit_weight = config.get_current_credit_weight(head_height);
-    auto weight_quantity = quantity * credit_weight / RATE_BASE_10000;
+    uint64_t new_credit_weight = config.get_credit_weight(head_height);
+    auto weight_quantity = quantity * new_credit_weight / RATE_BASE_10000;
 
     block_endorse::config_table _blk_config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
     auto blk_config = _blk_config.get_or_default();
 
-    if (old_quantity < weight_quantity) {
+    if (old_weight_quantity < weight_quantity) {
         asset qualification
             = old_quantity.amount == 0 ? blk_config.get_btc_base_stake() : asset{0, BTC_SYMBOL};
-        asset new_quantity = weight_quantity - old_quantity;
+        asset new_quantity = weight_quantity - old_weight_quantity;
 
         asset validator_staking, validator_qualification;
         std::tie(validator_staking, validator_qualification)
@@ -1281,10 +1287,10 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         // log
         endorse_manage::evmstakelog_action _evmstakelog(get_self(), {get_self(), "active"_n});
         _evmstakelog.send(proxy, staker, validator, weight_quantity, validator_staking, validator_qualification);
-    } else if (old_quantity > weight_quantity) {
+    } else if (old_weight_quantity > weight_quantity) {
         asset qualification
             = quantity.amount == 0 ? blk_config.get_btc_base_stake() : asset{0, BTC_SYMBOL};
-        asset new_quantity = old_quantity - weight_quantity;
+        asset new_quantity = old_weight_quantity - weight_quantity;
 
         asset validator_staking, validator_qualification;
         std::tie(validator_staking, validator_qualification)
@@ -1298,7 +1304,7 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
     // recovery credit stake quantity
     auto _raw_stake_itr = _evm_stake.find(stake_itr->id);
     _evm_stake.modify(_raw_stake_itr, same_payer, [&](auto& row) {
-        row.quantity = quantity;
+        row.quantity.amount = quantity.amount;
     });
     
 }
@@ -1681,9 +1687,6 @@ void endorse_manage::updcreditstk(const name& validator, const bool is_close) {
     asset quantity = asset{0, BTC_SYMBOL};
     asset qualification = asset{0, BTC_SYMBOL};
 
-    // chain state
-    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
-    auto chain_state = _chain_state.get();
     // get stake address from memo
     checksum160 stake_address = validator_itr->stake_address.has_value() ? validator_itr->stake_address.value():xsat::utils::evm_address_to_checksum160(validator_itr->memo);
     auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
@@ -1699,7 +1702,7 @@ void endorse_manage::updcreditstk(const name& validator, const bool is_close) {
         // if the stake is credit staking, then add credit quantity different from the stake quantity
         if (is_credit_staking) {
             
-            auto weight = config.get_current_credit_weight(chain_state.head_height);
+            auto weight = _get_current_credit_weight();
             auto credit_quantity = lb->quantity * weight / RATE_BASE_10000;
             quantity += credit_quantity;
         }else{
@@ -1785,7 +1788,7 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
     
     // calculate credit stake weight
     auto config = _config.get_or_default();
-    auto current_credit_weight = config.get_current_credit_weight(height);
+    auto current_credit_weight = config.get_credit_weight(height);
 
     if (current_credit_weight == validator_itr->get_credit_weight()) {
         return;
@@ -1819,8 +1822,7 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         
         // send action to update credit stake weight
         _creditstake(lb->proxy, lb->staker, validator, lb->quantity, height);
-        
-        lb++;
+        break;
     }
 
     // Modify the validator's credit stake weight
