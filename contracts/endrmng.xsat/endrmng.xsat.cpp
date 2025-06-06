@@ -306,9 +306,13 @@ void endorse_manage::claim(const name& staker, const name& validator, const uint
 
     auto validator_itr = _validator.require_find(native_staker_itr->validator.value,
                                                  "endrmng.xsat::claim: [validators] does not exists");
+
+    auto credit_weight = _get_current_credit_weight();
+    auto weight_quantity = native_staker_itr->quantity * credit_weight / RATE_BASE_10000;
+
     // update reward
     update_staking_reward(validator_itr->stake_acc_per_share, validator_itr->consensus_acc_per_share,
-                          native_staker_itr->quantity.amount, native_staker_itr->quantity.amount, native_staker_idx,
+                          weight_quantity.amount, weight_quantity.amount, native_staker_idx,
                           native_staker_itr);
 
     auto staking_reward_unclaimed = native_staker_itr->staking_reward_unclaimed;
@@ -445,8 +449,11 @@ void endorse_manage::evm_claim(const name& caller, const checksum160& proxy, con
 
     auto validator_itr = _validator.require_find(evm_staker_itr->validator.value,
                                                  "endrmng.xsat::evmclaim: [validators] does not exists");
+
+    auto credit_weight = _get_current_credit_weight();
+    auto weight_quantity = evm_staker_itr->quantity * credit_weight / RATE_BASE_10000;
     update_staking_reward(validator_itr->stake_acc_per_share, validator_itr->consensus_acc_per_share,
-                          evm_staker_itr->quantity.amount, evm_staker_itr->quantity.amount, evm_staker_idx,
+                          weight_quantity.amount, weight_quantity.amount, evm_staker_idx,
                           evm_staker_itr);
 
     auto staking_reward_unclaimed = evm_staker_itr->staking_reward_unclaimed;
@@ -1288,12 +1295,12 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         _evmunstlog.send(proxy, staker, validator, weight_quantity, validator_staking, validator_qualification);
     }
 
-    // update credit weight and credit weight block
+    // recovery credit stake quantity
     auto _raw_stake_itr = _evm_stake.find(stake_itr->id);
     _evm_stake.modify(_raw_stake_itr, same_payer, [&](auto& row) {
-        row.credit_weight = credit_weight;
-        row.credit_weight_block = head_height;
+        row.quantity = quantity;
     });
+    
 }
 
 //@auth rwddist.xsat
@@ -1570,6 +1577,23 @@ asset endorse_manage::get_qualification(const validator_row& validator_itr, cons
     return qualification;
 }
 
+uint64_t endorse_manage::_get_current_credit_weight() {
+    auto config = _config.get_or_default();
+    if (!config.next_credit_weight.has_value() || !config.next_credit_weight_block.has_value()) {
+        return RATE_BASE_10000;
+    }
+
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+    
+    if (chain_state.head_height >= config.next_credit_weight_block.value()) {
+        return config.next_credit_weight.value();
+    }
+
+    return config.credit_weight.has_value() ? config.credit_weight.value() : RATE_BASE_10000;
+}
+
+
 [[eosio::action]]
 void endorse_manage::setrwdaddr(const name& validator, const checksum160& reward_address) {
     
@@ -1753,6 +1777,11 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         row.consecutive_vote_count = is_consecutive ? row.consecutive_vote_count.value_or(0ULL) + 1ULL : 1ULL;
         row.latest_consensus_block = height;
     });
+
+    // only BTC Validator
+    if (validator_itr->role.has_value() && validator_itr->role.value() == 1) {
+        return;
+    }
     
     // calculate credit stake weight
     auto config = _config.get_or_default();
@@ -1787,16 +1816,9 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
             lb++;
             continue;
         }
-
-        // already update credit stake weight
-        if (lb->get_credit_weight_block() >= config.get_next_credit_block()) {
-            lb++;
-            continue;
-        }
-
+        
         // send action to update credit stake weight
-        auto raw_quantity = lb->quantity * RATE_BASE_10000 / lb->get_credit_weight();
-        _creditstake(lb->proxy, lb->staker, validator, raw_quantity, height);
+        _creditstake(lb->proxy, lb->staker, validator, lb->quantity, height);
         
         lb++;
     }
@@ -1829,3 +1851,5 @@ void endorse_manage::setcreditwei(const uint64_t credit_weight, const uint64_t c
 
     _config.set(config, get_self());
 }
+
+

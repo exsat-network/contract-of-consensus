@@ -219,22 +219,11 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         uint64_t consensus_debt;
         asset consensus_reward_unclaimed;
         asset consensus_reward_claimed;
-        binary_extension<uint64_t> credit_weight;
-        binary_extension<uint64_t> credit_weight_block;
         uint64_t primary_key() const { return id; }
         uint64_t by_validator() const { return validator.value; }
         checksum256 by_staker() const { return xsat::utils::compute_id(staker); }
         checksum256 by_proxy() const { return xsat::utils::compute_id(proxy); }
         checksum256 by_staking_id() const { return compute_staking_id(proxy, staker, validator); }
-
-        uint64_t get_credit_weight() const {
-
-            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
-        }
-        
-        uint64_t get_credit_weight_block() const {
-            return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
-        }
     };
     typedef eosio::multi_index<
         "evmstakers"_n, evm_staker_row,
@@ -295,20 +284,10 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         uint64_t consensus_debt;
         asset consensus_reward_unclaimed;
         asset consensus_reward_claimed;
-        binary_extension<uint64_t> credit_weight;
-        binary_extension<uint64_t> credit_weight_block;
         uint64_t primary_key() const { return id; }
         uint64_t by_validator() const { return validator.value; }
         uint64_t by_staker() const { return staker.value; }
         uint128_t by_staking_id() const { return compute_staking_id(staker, validator); }
-
-        uint64_t get_credit_weight() const {
-            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
-        }
-
-        uint64_t get_credit_weight_block() const {
-            return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
-        }
     };
     typedef eosio::multi_index<
         "stakers"_n, native_staker_row,
@@ -1476,6 +1455,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     asset get_qualification(const validator_row& validator_itr, const bool is_btc_validator, const checksum160& stake_addr);
 
     void _creditstake(const checksum160& proxy, const checksum160& staker, const name& validator, const asset& quantity, uint64_t head_height);
+    uint64_t _get_current_credit_weight();
 #ifdef DEBUG
     template <typename T>
     void clear_table(T& table, uint64_t rows_to_clear);
