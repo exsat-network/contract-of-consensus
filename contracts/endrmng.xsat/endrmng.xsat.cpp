@@ -1702,8 +1702,7 @@ void endorse_manage::updcreditstk(const name& validator, const bool is_close) {
         // if the stake is credit staking, then add credit quantity different from the stake quantity
         if (is_credit_staking) {
             
-            auto weight = _get_current_credit_weight();
-            auto credit_quantity = lb->quantity * weight / RATE_BASE_10000;
+            auto credit_quantity = lb->quantity * validator_itr->get_credit_weight() / RATE_BASE_10000;
             quantity += credit_quantity;
         }else{
 
