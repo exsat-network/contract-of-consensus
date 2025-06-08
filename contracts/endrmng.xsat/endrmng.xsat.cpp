@@ -594,8 +594,12 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
         check(validator_itr->role.value() == 0, "endrmng.xsat::evmstake: only BTC validator can be staked");
     }
 
+    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
+    auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
+    bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+
     // check deposit proxy
-    auto is_deposit = false;
+    auto is_deposit = is_credit_staking;
     auto config = _config.get_or_default();
     if (config.btc_deposit_proxy.has_value() && config.btc_deposit_proxy.value() == proxy) {
 
@@ -610,7 +614,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
     // check base stake
     block_endorse::config_table _blkconfig = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
     auto blkconfig = _blkconfig.get_or_default();
-    if (blkconfig.is_xsat_consensus_active(chain_state.head_height) && !is_deposit ) {
+    if (blkconfig.is_xsat_consensus_active(chain_state.head_height) && !is_deposit) {
 
         check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "endrmng.xsat::evmstake: validator must be active");
     }
@@ -678,8 +682,13 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
     auto validator_itr = _validator.require_find(evm_staker_itr->validator.value,
                                                  "endrmng.xsat::evmunstake: [validators] does not exists");
 
+
+    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
+    auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
+    bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+
     // check deposit proxy
-    auto is_deposit = false;
+    auto is_deposit = is_credit_staking;
     auto config = _config.get_or_default();
     if (config.btc_deposit_proxy.has_value() && config.btc_deposit_proxy.value() == proxy) {
 
