@@ -594,17 +594,22 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
         check(validator_itr->role.value() == 0, "endrmng.xsat::evmstake: only BTC validator can be staked");
     }
 
-    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
-    auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
-    bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
-
     // check deposit proxy
-    auto is_deposit = is_credit_staking;
+    auto is_deposit = false;
     auto config = _config.get_or_default();
     if (config.btc_deposit_proxy.has_value() && config.btc_deposit_proxy.value() == proxy) {
 
         check(validator_itr->stake_address.has_value() && staker == validator_itr->stake_address.value(), "endrmng.xsat::evmstake: only the validator's stake address can deposit");
         is_deposit = true;
+    }
+
+    // check credit proxy
+    if (!is_deposit){
+        
+        auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>(); 
+        auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
+        bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+        is_deposit = is_credit_staking;
     }
 
     // chain state
@@ -688,12 +693,21 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
     bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
 
     // check deposit proxy
-    auto is_deposit = is_credit_staking;
+    auto is_deposit = false;
     auto config = _config.get_or_default();
     if (config.btc_deposit_proxy.has_value() && config.btc_deposit_proxy.value() == proxy) {
 
         check(validator_itr->stake_address.has_value() && staker == validator_itr->stake_address.value(), "endrmng.xsat::evmunstake: only the validator's stake address can unstake");
         is_deposit = true;
+    }
+    
+    // check credit proxy
+    if (!is_deposit){
+        
+        auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>(); 
+        auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
+        bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+        is_deposit = is_credit_staking;
     }
 
     // v2 check base stake amount
@@ -1310,12 +1324,14 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         _evmunstlog.send(proxy, staker, validator, weight_quantity, validator_staking, validator_qualification);
     }
 
-    // recovery credit stake quantity
-    auto _raw_stake_itr = _evm_stake.find(stake_itr->id);
-    _evm_stake.modify(_raw_stake_itr, same_payer, [&](auto& row) {
+    print("update raw credit stake quantity ", stake_itr->id, "-", quantity);
+    if (stake_itr == evm_staker_idx.end()) {
+        stake_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
+    }
+    evm_staker_idx.modify(stake_itr, same_payer, [&](auto& row) {
         row.quantity.amount = quantity.amount;
     });
-    
+    print("update raw credit stake quantity ", stake_itr->id, "-", stake_itr->quantity);
 }
 
 //@auth rwddist.xsat
@@ -1828,7 +1844,7 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
             continue;
         }
         
-        // send action to update credit stake weight
+        // update credit stake weight
         _creditstake(lb->proxy, lb->staker, validator, lb->quantity, height);
         break;
     }

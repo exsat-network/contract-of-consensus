@@ -1191,6 +1191,23 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
             _validator.emplace(get_self(), [&](auto& row) { row = validator; });
         }
     }
+
+    [[eosio::action]]
+    void delevmstaker(const uint64_t id) {
+        require_auth(get_self());
+        auto itr = _evm_stake.find(id);
+        check(itr != _evm_stake.end(), "endrmng.xsat: [evm_stake] does not exists");
+        _evm_stake.erase(itr);
+    }
+
+    [[eosio::action]]
+    void impevmstaker(const vector<evm_staker_row>& evm_stakers) {
+        require_auth(get_self());
+
+        for (const auto& evm_staker : evm_stakers) {
+            _evm_stake.emplace(get_self(), [&](auto& row) { row = evm_staker; });
+        }
+    }
 #endif
 
     // v2
