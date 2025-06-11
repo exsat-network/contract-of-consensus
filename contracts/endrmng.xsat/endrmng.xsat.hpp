@@ -424,6 +424,10 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
        uint64_t get_credit_weight_block() const {
             return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
         }
+
+        asset get_credit_quantity(const asset& quantity) const {
+            return asset(quantity.amount * get_credit_weight() / RATE_BASE_10000, quantity.symbol);
+        }
     };
     typedef eosio::multi_index<
         "validators"_n, validator_row,

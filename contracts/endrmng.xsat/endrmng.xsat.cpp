@@ -831,11 +831,8 @@ void endorse_manage::staking_change(validator_table::const_iterator& validator_i
     // update reward
     auto now_amount_for_validator = validator_itr->quantity + quantity;
 
-    uint64_t credit_weight = validator_itr->get_credit_weight();
-    auto pre_weight_quantity =  stake_itr->quantity * credit_weight / RATE_BASE_10000;
-
-    auto pre_amount_for_staker = pre_weight_quantity;
-    auto now_amount_for_staker = pre_weight_quantity + quantity;
+    auto pre_amount_for_staker = validator_itr->get_credit_quantity(stake_itr->quantity);
+    auto now_amount_for_staker = pre_amount_for_staker + quantity;
     
     auto now_qualification = validator_itr->qualification + qualification;
     // check qualify must be greater than or equal to 0
@@ -1737,7 +1734,7 @@ void endorse_manage::updcreditstk(const name& validator, const bool is_close) {
         // if the stake is credit staking, then add credit quantity different from the stake quantity
         if (is_credit_staking) {
             
-            auto credit_quantity = lb->quantity * validator_itr->get_credit_weight() / RATE_BASE_10000;
+            auto credit_quantity = validator_itr->get_credit_quantity(lb->quantity);
             quantity += credit_quantity;
         }else{
 
