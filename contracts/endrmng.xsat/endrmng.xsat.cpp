@@ -830,8 +830,12 @@ void endorse_manage::staking_change(validator_table::const_iterator& validator_i
                                     const asset& quantity, const asset& qualification, const optional<uint8_t>& active_flag) {
     // update reward
     auto now_amount_for_validator = validator_itr->quantity + quantity;
-    auto pre_amount_for_staker = stake_itr->quantity;
-    auto now_amount_for_staker = stake_itr->quantity + quantity;
+
+    uint64_t credit_weight = validator_itr->get_credit_weight();
+    auto pre_weight_quantity =  stake_itr->quantity * credit_weight / RATE_BASE_10000;
+
+    auto pre_amount_for_staker = pre_weight_quantity;
+    auto now_amount_for_staker = pre_weight_quantity + quantity;
     
     auto now_qualification = validator_itr->qualification + qualification;
     // check qualify must be greater than or equal to 0
@@ -1324,14 +1328,20 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         _evmunstlog.send(proxy, staker, validator, weight_quantity, validator_staking, validator_qualification);
     }
 
-    print("update raw credit stake quantity ", stake_itr->id, "-", quantity);
     if (stake_itr == evm_staker_idx.end()) {
         stake_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
     }
     evm_staker_idx.modify(stake_itr, same_payer, [&](auto& row) {
         row.quantity.amount = quantity.amount;
     });
-    print("update raw credit stake quantity ", stake_itr->id, "-", stake_itr->quantity);
+
+    if (credit_weight != new_credit_weight){
+        // Modify the validator's credit stake weight
+        _validator.modify(validator_itr, get_self(), [&](auto& row) {
+            row.credit_weight = new_credit_weight;
+            row.credit_weight_block = head_height;
+        });
+    }
 }
 
 //@auth rwddist.xsat
@@ -1845,15 +1855,10 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         }
         
         // update credit stake weight
-        _creditstake(lb->proxy, lb->staker, validator, lb->quantity, height);
+        asset quantity = asset{lb->quantity.amount, lb->quantity.symbol};
+        _creditstake(lb->proxy, lb->staker, validator, quantity, height);
         break;
     }
-
-    // Modify the validator's credit stake weight
-    _validator.modify(validator_itr, get_self(), [&](auto& row) {
-        row.credit_weight = current_credit_weight;
-        row.credit_weight_block = height;
-    });
 
     if (!config.credit_weight.has_value() || config.credit_weight.value() != current_credit_weight) {
 
