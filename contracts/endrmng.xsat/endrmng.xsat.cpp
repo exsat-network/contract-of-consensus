@@ -692,11 +692,6 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
     auto validator_itr = _validator.require_find(evm_staker_itr->validator.value,
                                                  "endrmng.xsat::evmunstake: [validators] does not exists");
 
-
-    auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>();
-    auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
-    bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
-
     // check deposit proxy
     auto is_deposit = false;
     auto config = _config.get_or_default();
