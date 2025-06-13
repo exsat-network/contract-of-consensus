@@ -603,6 +603,11 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
         is_deposit = true;
     }
 
+    auto stake_quantity = quantity;
+    if (stake_itr != evm_staker_idx.end()) {
+
+        stake_quantity += stake_itr->quantity;
+    }
     // check credit proxy
     if (!is_deposit){
         
@@ -610,6 +615,11 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
         auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
         bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
         is_deposit = is_credit_staking;
+
+        if (is_credit_staking){
+
+            stake_quantity = validator_itr->get_credit_quantity(quantity);
+        }
     }
 
     // chain state
@@ -632,11 +642,6 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
     auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value():0;
     if (is_deposit) {
 
-        auto stake_quantity = quantity;
-        if (stake_itr != evm_staker_idx.end()) {
-
-            stake_quantity += stake_itr->quantity;
-        }
         if (stake_quantity >= blkconfig.get_btc_base_stake()) {
 
             active_flag = 1;
