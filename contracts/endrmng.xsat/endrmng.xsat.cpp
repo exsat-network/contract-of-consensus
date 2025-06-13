@@ -603,18 +603,6 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
         is_deposit = true;
     }
 
-    // chain state
-    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
-    auto chain_state = _chain_state.get();
-
-    // check base stake
-    block_endorse::config_table _blkconfig = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
-    auto blkconfig = _blkconfig.get_or_default();
-    if (blkconfig.is_xsat_consensus_active(chain_state.head_height) && !is_deposit) {
-
-        check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "endrmng.xsat::evmstake: validator must be active");
-    }
-
     auto evm_staker_idx = _evm_stake.get_index<"bystakingid"_n>();
     auto stake_itr = evm_staker_idx.find(compute_staking_id(proxy, staker, validator));
     auto qualification_changed = qualification;
@@ -636,6 +624,18 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
             stake_quantity = validator_itr->get_credit_quantity(quantity);
         }
+    }
+    
+    // chain state
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+
+    // check base stake
+    block_endorse::config_table _blkconfig = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
+    auto blkconfig = _blkconfig.get_or_default();
+    if (blkconfig.is_xsat_consensus_active(chain_state.head_height) && !is_deposit) {
+
+        check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "endrmng.xsat::evmstake: validator must be active");
     }
 
     // v2 check base stake amount
