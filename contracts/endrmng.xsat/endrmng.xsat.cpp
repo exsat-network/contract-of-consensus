@@ -701,6 +701,7 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
         is_deposit = true;
     }
     
+    auto new_stake_quantity = evm_staker_itr->quantity - quantity;
     // check credit proxy
     if (!is_deposit){
         
@@ -708,6 +709,11 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
         auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
         bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
         is_deposit = is_credit_staking;
+
+        if (is_credit_staking){
+
+            new_stake_quantity = validator_itr->get_credit_quantity(evm_staker_itr->quantity);
+        }
     }
 
     // v2 check base stake amount
@@ -717,7 +723,7 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
 
         block_endorse::config_table _config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
         auto config = _config.get_or_default();
-        if (evm_staker_itr->quantity - quantity >= config.get_btc_base_stake()) {
+        if (new_stake_quantity >= config.get_btc_base_stake()) {
 
             active_flag = 1;
         } else {
