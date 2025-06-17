@@ -4,6 +4,7 @@
 #include <eosio/name.hpp>
 #include <eosio/singleton.hpp>
 #include <eosio/asset.hpp>
+#include <eosio/binary_extension.hpp>
 #include <sstream>
 #include <endrmng.xsat/endrmng.xsat.hpp>
 #include <btc.xsat/btc.xsat.hpp>
@@ -87,6 +88,74 @@ public:
     [[eosio::action]]
     void creditstake(const checksum160& staker, const uint64_t balance);
 
+    /**
+     * ## ACTION `config`
+     *
+     * - **authority**: `get_self()`
+     *
+     * > Set the valid block range for transaction verification
+     *
+     * ### params
+     *
+     * - `{uint64_t} valid_blocks` - number of blocks considered valid for verification
+     *
+     * ### example
+     *
+     * ```bash
+     * $ cleos push action custody.xsat config '[1004]' -p custody.xsat
+     * ```
+     */
+    [[eosio::action]]
+    void config(const uint64_t valid_blocks);
+
+    /**
+     * ## ACTION `enroll`
+     *
+     * - **authority**: `account`
+     *
+     * > Enroll an account in the system and return a unique identifier
+     *
+     * ### params
+     *
+     * - `{name} account` - account to enroll
+     *
+     * ### return
+     *
+     * - `{uint64_t}` - unique identifier for the enrolled account
+     *
+     * ### example
+     *
+     * ```bash
+     * $ cleos push action custody.xsat enroll '["myaccount"]' -p myaccount
+     * ```
+     */
+    [[eosio::action]]
+    uint64_t enroll(const name& account);
+
+    /**
+     * ## ACTION `verifytx`
+     *
+     * - **authority**: `account`
+     *
+     * > Verify a Bitcoin transaction for the specified account
+     *
+     * ### params
+     *
+     * - `{name} account` - account requesting verification
+     * - `{string} btc_address` - Bitcoin address involved in the transaction
+     * - `{checksum256} txid` - Transaction ID to verify
+     * - `{string} information` - Additional transaction information
+     *
+     * ### example
+     *
+     * ```bash
+     * $ cleos push action custody.xsat verifytx '["myaccount", "bc1q9h8zk36g3vajhlgvgk7x33vnygyn66fx8m0srt",
+     * "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b", "transaction details"]' -p myaccount
+     * ```
+     */
+    [[eosio::action]]
+    void verifytx(const name& account, const string& btc_address, const checksum256& txid, const string& information);
+
 #ifdef DEBUG
     [[eosio::action]]
     void cleartable(const name table_name, const optional<name> scope, const optional<uint64_t> max_rows);
@@ -94,6 +163,8 @@ public:
     void addr2pubkey(const string& address);
     [[eosio::action]]
     void pubkey2addr(const vector<uint8_t> data);
+    [[eosio::action]]
+    void modifyrandom(const name& account, const uint64_t random);
 #endif
 
 private:
@@ -115,6 +186,7 @@ private:
      */
     struct [[eosio::table]] global_row {
         uint64_t custody_id;
+        binary_extension<uint64_t> valid_blocks;
     };
     typedef singleton<"globals"_n, global_row> global_table;
     global_table _global = global_table(_self, _self.value);
@@ -168,8 +240,56 @@ private:
         eosio::indexed_by<"scriptpubkey"_n, const_mem_fun<custody_row, checksum256, &custody_row::by_scriptpubkey>>>
         custody_index;
 
+    /**
+     * ## TABLE `enrollment_row`
+     *
+     * ### scope `get_self()`
+     * ### params
+     *
+     * - `{name} account` - the enrolled account name
+     * - `{uint64_t} random` - random identifier assigned during enrollment
+     * - `{string} btc_address` - the associated Bitcoin address
+     * - `{checksum256} txid` - transaction ID for verification
+     * - `{uint32_t} index` - index position in transaction
+     * - `{uint64_t} start_height` - starting block height for validity period
+     * - `{uint64_t} end_height` - ending block height for validity period
+     * - `{bool} is_valid` - validation status flag
+     * - `{string} information` - additional transaction information
+     *
+     * ### example
+     *
+     * ```
+     * {
+     *   "account": "test.sat",
+     *   "random": 15309,
+     *   "btc_address": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+     *   "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+     *   "index": 0,
+     *   "start_height": 750000,
+     *   "end_height": 750006,
+     *   "is_valid": true,
+     *   "information": "User verification transaction details"
+     * }
+     * ```
+     *
+     */
+    struct [[eosio::table]] enrollment_row {
+        name account;
+        uint64_t random;
+        string btc_address;
+        checksum256 txid;
+        uint32_t index;
+        uint64_t start_height;
+        uint64_t end_height;
+        bool is_valid;
+        string information;
+        uint64_t primary_key() const { return account.value; }
+    };
+    typedef eosio::multi_index<"enrollments"_n, enrollment_row> enrollment_index;
+
     // table init
     custody_index _custody = custody_index(_self, _self.value);
+    enrollment_index _enrollment = enrollment_index(_self, _self.value);
 
     template <typename T>
     uint64_t get_current_staking_value(T& itr);

@@ -17,6 +17,9 @@ void custody::cleartable(const name table_name, const optional<name> scope, cons
     } else if (table_name == "custodies"_n) {
         custody_index _custody(get_self(), get_self().value);
         clear_table(_custody, rows_to_clear);
+    } else if (table_name == "enrollments"_n) {
+        enrollment_index _enrollment(get_self(), get_self().value);
+        clear_table(_enrollment, rows_to_clear);
     } else {
         check(false, "custody::cleartable: [table_name] unknown table to clear");
     }
@@ -40,4 +43,12 @@ void custody::pubkey2addr(const vector<uint8_t> data) {
     }
 }
 
-
+[[eosio::action]]
+void custody::modifyrandom(const name& account, const uint64_t random) {
+    require_auth(get_self());
+    auto enroll_itr = _enrollment.require_find(account.value, "custody.xsat::modifyrandom: account not enrolled");
+    _enrollment.modify(enroll_itr, same_payer, [&](auto& row) {
+        row.random = random;
+    });
+    print_f("custody.xsat::modifyrandom: random value for % updated to %", account, random);
+}
