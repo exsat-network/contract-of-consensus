@@ -622,7 +622,7 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
         if (is_credit_staking){
 
-            stake_quantity = qualification;
+            stake_quantity += qualification;
         }
     }
     
