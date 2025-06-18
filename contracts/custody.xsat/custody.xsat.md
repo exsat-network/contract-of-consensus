@@ -8,6 +8,7 @@
 - config
 - enroll
 - verifytx
+- verifyresult
 
 
 ## Quickstart
@@ -30,6 +31,9 @@ $ cleos push action custody.xsat enroll '["test.sat"]' -p test.sat
 
 # enroll @test.sat
 $ cleos push action custody.xsat verifytx '["test.sat", "tb1qgg49qv5r6keqzal7h8m5ts85pypjgwdrexpc0a", "d521bc7ee85628dcb2f466e3c71db08bd014fca1bc5921694426f5af7fe866b1", "hello"]' -p test.sat
+
+# verifyresult @test.sat
+$ cleos push action custody.xsat verifyresult '["test.sat", 1, "verfication result"]' -p test.sat
 
 ## Table Information
 

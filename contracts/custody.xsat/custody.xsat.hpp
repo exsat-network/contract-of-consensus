@@ -156,6 +156,9 @@ public:
     [[eosio::action]]
     void verifytx(const name& account, const string& btc_address, const checksum256& txid, const string& information);
 
+    [[eosio::action]]
+    void verifyresult(const name& account, const uint8_t is_valid, const string& verification_result);
+
 #ifdef DEBUG
     [[eosio::action]]
     void cleartable(const name table_name, const optional<name> scope, const optional<uint64_t> max_rows);
@@ -281,8 +284,9 @@ private:
         uint32_t index;
         uint64_t start_height;
         uint64_t end_height;
-        bool is_valid;
+        uint8_t is_valid = 0; // 0-init, 1-valid, 2-invalid
         string information;
+        string verification_result;  // result of the verification
         uint64_t primary_key() const { return account.value; }
     };
     typedef eosio::multi_index<"enrollments"_n, enrollment_row> enrollment_index;

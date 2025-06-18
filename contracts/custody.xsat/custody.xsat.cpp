@@ -106,26 +106,22 @@ uint64_t custody::enroll(const name& account) {
 
     auto itr = _enrollment.find(account.value);
     if (itr != _enrollment.end()) {
-        check(!itr->is_valid, "custody.xsat::enroll: account already enrolled");
-        if (chain_state.head_height < itr->end_height) {
-            check(false, "custody.xsat::enroll: enrollment is not expired yet, no need to enroll again");
-        } else {
-            _enrollment.modify(itr, same_payer, [&](auto& row) {
-                row.btc_address.clear();
-                row.txid = checksum256();
-                row.start_height = chain_state.head_height;
-                row.end_height = chain_state.head_height + valid_blocks;
-                row.random = random;
-                row.is_valid = false;
-            });
-        }
+        check(itr->is_valid == 2, "custody.xsat::enroll: please wait for the result of the last verification");
+        _enrollment.modify(itr, same_payer, [&](auto& row) {
+            row.btc_address.clear();
+            row.txid = checksum256();
+            row.start_height = chain_state.head_height;
+            row.end_height = chain_state.head_height + valid_blocks;
+            row.random = random;
+            row.is_valid = 0;
+        });
     } else {
         _enrollment.emplace(get_self(), [&](auto& row) {
             row.account = account;
             row.random = random;
             row.start_height = chain_state.head_height;
             row.end_height = chain_state.head_height + valid_blocks;
-            row.is_valid = false;
+            row.is_valid = 0;
         });
     }
     return random;
@@ -135,43 +131,29 @@ void custody::verifytx(const name& account, const string& btc_address, const che
     require_auth(account);
     check(xsat::utils::is_bitcoin_address(btc_address), "custody.xsat::verifytx: invalid bitcoin address");
     auto enroll_itr = _enrollment.require_find(account.value, "custody.xsat::verifytx: account not enrolled");
-    check(!enroll_itr->is_valid, "custody.xsat::verifytx: account already verified");
+    if (enroll_itr->is_valid == 1) {
+        check(false, "custody.xsat::verifytx: account already verified");
+    } else if (enroll_itr->is_valid == 2) {
+        check(false, "custody.xsat::verifytx: verification failed. please re-verify");
+    }
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
     check(chain_state.head_height <= enroll_itr->end_height, "custody.xsat::verifytx: the txid verification has expired; please enroll again");
 
-    utxo_manage::utxo_table _utxo = utxo_manage::utxo_table(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
-    utxo_manage::pending_utxo_table _pending_utxo = utxo_manage::pending_utxo_table(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
-    auto utxo_idx = _utxo.get_index<"byutxoid"_n>();
-    bool is_valid = false;
-    uint32_t real_index = 0;
-    for (uint32_t index = 0; index <= 50; index++) {
-        checksum256 utxo_id = xsat::utils::compute_utxo_id(txid, index);
-        auto utxo_itr = utxo_idx.find(utxo_id);
-        if (utxo_itr != utxo_idx.end() && utxo_itr->value % 100000 == enroll_itr->random) {
-            is_valid = true;
-            real_index = index;
-            break;
-        }
-    }
-    if (!is_valid) {
-        auto pending_utxo_idx = _pending_utxo.get_index<"byutxoid"_n>();
-        for (uint32_t index = 0; index <= 50; index++) {
-            checksum256 utxo_id = xsat::utils::compute_utxo_id(txid, index);
-            auto pending_utxo_itr = pending_utxo_idx.find(utxo_id);
-            if (pending_utxo_itr != pending_utxo_idx.end() && pending_utxo_itr->value % 100000 == enroll_itr->random) {
-                is_valid = true;
-                break;
-            }
-        }
-    }
-    check(is_valid, "custody.xsat::verifytx: the txid is not valid");
     _enrollment.modify(enroll_itr, same_payer, [&](auto& row) {
         row.btc_address = btc_address;
         row.txid = txid;
-        row.index = real_index;
-        row.is_valid = true;
         row.information = information;
+    });
+}
+
+void custody::verifyresult(const name& account, const uint8_t is_valid, const string& verification_result) {
+    require_auth(get_self());
+    check(is_valid == 1 || is_valid == 2, "custody.xsat::verifyresult: is_valid must be 1 or 2");
+    auto enroll_itr = _enrollment.require_find(account.value, "custody.xsat::verifyresult: account not enrolled");
+    _enrollment.modify(enroll_itr, same_payer, [&](auto& row) {
+        row.is_valid = is_valid;
+        row.verification_result = verification_result;
     });
 }
 
