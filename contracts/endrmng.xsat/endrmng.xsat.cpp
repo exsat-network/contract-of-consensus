@@ -456,7 +456,7 @@ void endorse_manage::evm_claim(const name& caller, const checksum160& proxy, con
     if (is_credit_staking){
 
         auto credit_weight = _get_current_credit_weight();
-        stake_amount = stake_amount * credit_weight / RATE_BASE_10000;
+        stake_amount = safemath::muldiv(stake_amount, credit_weight, RATE_BASE_10000);
     }
     update_staking_reward(validator_itr->stake_acc_per_share, validator_itr->consensus_acc_per_share,
                           stake_amount, stake_amount, evm_staker_idx, evm_staker_itr);
@@ -1296,10 +1296,10 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         old_quantity = stake_itr->quantity;
     }
     uint64_t credit_weight = validator_itr->get_credit_weight();
-    auto old_weight_quantity = old_quantity * credit_weight / RATE_BASE_10000;
+    auto old_weight_quantity = asset(safemath::muldiv(old_quantity.amount, credit_weight, RATE_BASE_10000), old_quantity.symbol);
     
     uint64_t new_credit_weight = config.get_credit_weight(head_height);
-    auto weight_quantity = quantity * new_credit_weight / RATE_BASE_10000;
+    auto weight_quantity = asset(safemath::muldiv(quantity.amount, new_credit_weight, RATE_BASE_10000), quantity.symbol);
 
     block_endorse::config_table _blk_config = block_endorse::config_table(BLOCK_ENDORSE_CONTRACT, BLOCK_ENDORSE_CONTRACT.value);
     auto blk_config = _blk_config.get_or_default();

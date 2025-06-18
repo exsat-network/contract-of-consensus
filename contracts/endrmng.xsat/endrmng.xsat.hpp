@@ -7,6 +7,7 @@
 #include <eosio/binary_extension.hpp>
 #include "../internal/defines.hpp"
 #include "../internal/utils.hpp"
+#include "../internal/safemath.hpp"
 
 using namespace eosio;
 using namespace std;
@@ -426,7 +427,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         }
 
         asset get_credit_quantity(const asset& quantity) const {
-            return asset(quantity.amount * get_credit_weight() / RATE_BASE_10000, quantity.symbol);
+            return asset(safemath::muldiv(quantity.amount, get_credit_weight(), RATE_BASE_10000), quantity.symbol);
         }
     };
     typedef eosio::multi_index<
