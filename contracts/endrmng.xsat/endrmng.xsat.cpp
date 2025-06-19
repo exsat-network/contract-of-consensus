@@ -1264,9 +1264,7 @@ void endorse_manage::delcrdtproxy(const checksum160& proxy) {
 [[eosio::action]]
 void endorse_manage::creditstake(const checksum160& proxy, const checksum160& staker, const name& validator,
                                  const asset& quantity) {
-    if (!has_auth(get_self())){
-        require_auth(CUSTODY_CONTRACT);
-    }
+    require_auth(CUSTODY_CONTRACT);
 
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
