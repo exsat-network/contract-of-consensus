@@ -1462,7 +1462,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     template <typename T, typename C>
     void staking_change(validator_table::const_iterator& validator_itr, T& _stake, C& stake_itr, const asset& quantity,
-                        const asset& qualification, const optional<uint8_t>& active_flag);
+                        const asset& qualification, const optional<uint8_t>& active_flag, const bool is_credit_staking);
 
     template <typename T, typename C>
     void update_staking_reward(const uint128_t stake_acc_per_share, const uint128_t consensus_acc_per_share,

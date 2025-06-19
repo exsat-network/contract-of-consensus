@@ -612,12 +612,13 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
 
         stake_quantity += stake_itr->quantity;
     }
+    bool is_credit_staking = false;
     // check credit proxy
     if (!is_deposit){
         
         auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>(); 
         auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
-        bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+        is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
         is_deposit = is_credit_staking;
 
         if (is_credit_staking){
@@ -670,9 +671,9 @@ std::pair<asset, asset> endorse_manage::evm_stake_without_auth(const checksum160
             row.consensus_reward_claimed = asset{0, XSAT_SYMBOL};
         });
 
-        staking_change(validator_itr, _evm_stake, stake_itr, quantity, qualification_changed, active_flag);
+        staking_change(validator_itr, _evm_stake, stake_itr, quantity, qualification_changed, active_flag, is_credit_staking);
     } else {
-        staking_change(validator_itr, evm_staker_idx, stake_itr, quantity, qualification_changed, active_flag);
+        staking_change(validator_itr, evm_staker_idx, stake_itr, quantity, qualification_changed, active_flag, is_credit_staking);
     }
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
@@ -701,12 +702,13 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
     }
     
     auto new_stake_quantity = evm_staker_itr->quantity - quantity;
+    bool is_credit_staking = false;
     // check credit proxy
     if (!is_deposit){
         
         auto credit_proxy_idx = _credit_proxy.get_index<"byproxy"_n>(); 
         auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(proxy));
-        bool is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
+        is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
         is_deposit = is_credit_staking;
 
         if (is_credit_staking){
@@ -743,7 +745,7 @@ std::pair<asset, asset> endorse_manage::evm_unstake_without_auth(const checksum1
         }
     }
 
-    staking_change(validator_itr, evm_staker_idx, evm_staker_itr, -quantity, -qualification_changed, active_flag);
+    staking_change(validator_itr, evm_staker_idx, evm_staker_itr, -quantity, -qualification_changed, active_flag, is_credit_staking);
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
 
@@ -793,9 +795,9 @@ std::pair<asset, asset> endorse_manage::stake_without_auth(const name& staker, c
             row.consensus_reward_unclaimed = asset{0, XSAT_SYMBOL};
             row.consensus_reward_claimed = asset{0, XSAT_SYMBOL};
         });
-        staking_change(validator_itr, _native_stake, stake_itr, quantity, qualification_changed, std::nullopt);
+        staking_change(validator_itr, _native_stake, stake_itr, quantity, qualification_changed, std::nullopt, false);
     } else {
-        staking_change(validator_itr, native_staker_idx, stake_itr, quantity, qualification_changed, std::nullopt);
+        staking_change(validator_itr, native_staker_idx, stake_itr, quantity, qualification_changed, std::nullopt, false);
     }
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
@@ -826,17 +828,17 @@ std::pair<asset, asset> endorse_manage::unstake_without_auth(const name& staker,
         qualification_changed = asset{0, BTC_SYMBOL};
     }
 
-    staking_change(validator_itr, native_staker_idx, native_staker_itr, -quantity, -qualification_changed, std::nullopt);
+    staking_change(validator_itr, native_staker_idx, native_staker_itr, -quantity, -qualification_changed, std::nullopt, false);
     return std::make_pair(validator_itr->quantity, validator_itr->qualification);
 }
 
 template <typename T, typename C>
 void endorse_manage::staking_change(validator_table::const_iterator& validator_itr, T& _stake, C& stake_itr,
-                                    const asset& quantity, const asset& qualification, const optional<uint8_t>& active_flag) {
+                                    const asset& quantity, const asset& qualification, const optional<uint8_t>& active_flag, const bool is_credit_staking) {
     // update reward
     auto now_amount_for_validator = validator_itr->quantity + quantity;
 
-    auto pre_amount_for_staker = validator_itr->get_credit_quantity(stake_itr->quantity);
+    auto pre_amount_for_staker = is_credit_staking ? validator_itr->get_credit_quantity(stake_itr->quantity) : stake_itr->quantity;
     auto now_amount_for_staker = pre_amount_for_staker + quantity;
     
     auto now_qualification = validator_itr->qualification + qualification;
