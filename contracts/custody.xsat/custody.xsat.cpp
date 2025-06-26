@@ -63,6 +63,10 @@ void custody::delcustody(const checksum160 staker) {
         endorse_manage::creditstake_action creditstake(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
         creditstake.send(staker_itr->proxy, staker_itr->staker, staker_itr->validator, asset(0, BTC_SYMBOL));
     }
+    auto enrollment_itr = _enrollment.find(staker_itr->validator.value);
+    if (enrollment_itr != _enrollment.end()) {
+        _enrollment.erase(enrollment_itr);
+    }
     staker_idx.erase(staker_itr);
 }
 
@@ -102,7 +106,7 @@ uint64_t custody::enroll(const name& account) {
     const checksum256 transaction_id = xsat::utils::get_trx_id();
     uint64_t random = 0;
     memcpy(&random, transaction_id.extract_as_byte_array().data(), sizeof(uint64_t));
-    random = 10000 + (random % 90001);
+    random = 1000 + (random % 9001);
 
     auto itr = _enrollment.find(account.value);
     if (itr != _enrollment.end()) {
@@ -114,6 +118,7 @@ uint64_t custody::enroll(const name& account) {
             row.end_height = chain_state.head_height + valid_blocks;
             row.random = random;
             row.is_valid = 0;
+            row.verification_result = "";
         });
     } else {
         _enrollment.emplace(get_self(), [&](auto& row) {
