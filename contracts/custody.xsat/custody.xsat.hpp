@@ -14,7 +14,7 @@
 #include "../internal/safemath.hpp"
 
 using namespace eosio;
-using namespace std;
+using std::string;
 
 class [[eosio::contract("custody.xsat")]] custody : public contract {
 

@@ -110,7 +110,9 @@ uint64_t custody::enroll(const name& account) {
 
     auto itr = _enrollment.find(account.value);
     if (itr != _enrollment.end()) {
-        check(itr->is_valid == 2, "custody.xsat::enroll: please wait for the result of the last verification");
+        if (chain_state.head_height <= itr->end_height) {
+            check(itr->is_valid == 2, "custody.xsat::enroll: please wait for the result of the last verification");
+        }
         _enrollment.modify(itr, same_payer, [&](auto& row) {
             row.btc_address.clear();
             row.txid = checksum256();
