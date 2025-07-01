@@ -25,6 +25,7 @@ $ cleos push action rwddist.xsat setrwdconfig '{"v1": {"miner_reward_rate": 1000
 ```bash
 $ cleos get table rwddist.xsat rwddist.xsat rewardlogs
 $ cleos get table rwddist.xsat rwddist.xsat rewardbal 
+$ cleos get table rwddist.xsat rwddist.xsat rewardconfig
 ```
 
 ## Table of Content
@@ -39,24 +40,39 @@ $ cleos get table rwddist.xsat rwddist.xsat rewardbal
   - [scope `get_self()`](#scope-get_self)
   - [params](#params-1)
   - [example](#example-2)
-- [ACTION `distribute`](#action-distribute)
+- [STRUCT `reward_rate_t`](#struct-reward_rate_t)
   - [params](#params-2)
   - [example](#example-3)
-- [ACTION `endtreward`](#action-endtreward)
+- [TABLE `rewardconfig`](#table-rewardconfig)
+  - [scope `get_self()`](#scope-get_self-1)
   - [params](#params-3)
   - [example](#example-4)
+- [ACTION `distribute`](#action-distribute)
+  - [params](#params-4)
+  - [example](#example-5)
+- [ACTION `endtreward`](#action-endtreward)
+  - [params](#params-5)
+  - [example](#example-6)
+- [ACTION `endtreward2`](#action-endtreward2)
+  - [params](#params-6)
+  - [example](#example-7)
+- [ACTION `setrwdconfig`](#action-setrwdconfig)
+  - [params](#params-7)
+  - [example](#example-8)
 
 ## STRUCT `validator_info`
 
 - `{name} account` - validator account
 - `{uint64_t} staking` - the validator's staking amount
+- `{time_point_sec} created_at` - created at time
 
 ### example
 
 ```json
 {
   "account": "test.xsat",
-  "staking": "10200000000"
+  "staking": "10200000000",
+  "created_at": "2024-08-13T00:00:00"
 }
 ```
 
@@ -131,6 +147,71 @@ $ cleos get table rwddist.xsat rwddist.xsat rewardbal
 }
 ```
 
+## STRUCT `reward_rate_t`
+
+### params
+
+- `{uint64_t} miner_reward_rate` - reward rate for miners
+- `{uint64_t} synchronizer_reward_rate` - reward rate for synchronizers
+- `{uint64_t} btc_consensus_reward_rate` - reward rate for BTC consensus
+- `{uint64_t} xsat_consensus_reward_rate` - reward rate for XSAT consensus
+- `{uint64_t} xsat_staking_reward_rate` - reward rate for XSAT staking
+- `{uint64_t} reserve1` - reserved for future use
+- `{uint64_t} reserve2` - reserved for future use
+- `{std::optional<int>} reserved3` - reserved for future use
+
+### example
+
+```json
+{
+  "miner_reward_rate": 1000,
+  "synchronizer_reward_rate": 1000,
+  "btc_consensus_reward_rate": 1000,
+  "xsat_consensus_reward_rate": 1000,
+  "xsat_staking_reward_rate": 1000,
+  "reserve1": 0,
+  "reserve2": 0,
+  "reserved3": null
+}
+```
+
+## TABLE `rewardconfig`
+
+### scope `get_self()`
+### params
+
+- `{uint16_t} cached_version` - cached version (0 - unset)
+- `{reward_rate_t} v1` - reward rate configuration version 1
+- `{reward_rate_t} v2` - reward rate configuration version 2
+
+### example
+
+```json
+{
+  "cached_version": 0,
+  "v1": {
+    "miner_reward_rate": 1000,
+    "synchronizer_reward_rate": 1000,
+    "btc_consensus_reward_rate": 1000,
+    "xsat_consensus_reward_rate": 1000,
+    "xsat_staking_reward_rate": 1000,
+    "reserve1": 0,
+    "reserve2": 0,
+    "reserved3": null
+  },
+  "v2": {
+    "miner_reward_rate": 2000,
+    "synchronizer_reward_rate": 500,
+    "btc_consensus_reward_rate": 0,
+    "xsat_consensus_reward_rate": 500,
+    "xsat_staking_reward_rate": 0,
+    "reserve1": 0,
+    "reserve2": 0,
+    "reserved3": null
+  }
+}
+```
+
 ## ACTION `distribute`
 
 - **authority**: `utxomng.xsat`
@@ -163,4 +244,38 @@ $ cleos push action rwddist.xsat distribute '[840000]' -p utxomng.xsat
 
 ```bash
 $ cleos push action rwddist.xsat endtreward '[840000, 0, 10]' -p utxomng.xsat
+```
+
+## ACTION `endtreward2`
+
+- **authority**: `utxomng.xsat`
+
+> Allocate XSAT rewards and record allocation information.
+
+### params
+
+- `{uint64_t} height` - block height
+- `{uint32_t} from_index` - the starting reward index of provider_validators
+- `{uint32_t} to_index` - end reward index of provider_validators
+
+### example
+
+```bash
+$ cleos push action rwddist.xsat endtreward2 '[840000, 0, 10]' -p utxomng.xsat
+```
+
+## ACTION `setrwdconfig`
+
+- **authority**: `get_self()`
+
+> Set reward configuration.
+
+### params
+
+- `{reward_config_row} config` - reward configuration
+
+### example
+
+```bash
+$ cleos push action rwddist.xsat setrwdconfig '{"v1": {"miner_reward_rate": 1000, "synchronizer_reward_rate": 1000, "btc_consensus_reward_rate": 1000, "xsat_consensus_reward_rate": 1000, "xsat_staking_reward_rate": 1000}, "v2": {"miner_reward_rate": 2000, "synchronizer_reward_rate": 500, "btc_consensus_reward_rate": 0, "xsat_consensus_reward_rate": 500}}' -p rwddist.xsat
 ```

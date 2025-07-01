@@ -63,6 +63,8 @@ static constexpr name UTXO_MANAGE_CONTRACT = "utxomng.xsat"_n;
 static constexpr name RESOURCE_MANAGE_CONTRACT = "rescmng.xsat"_n;
 static constexpr name REWARD_DISTRIBUTION_CONTRACT = "rwddist.xsat"_n;
 static constexpr name CUSTODY_CONTRACT = "custody.xsat"_n;
+static constexpr name GAS_FUND_CONTRACT = "gasfund.xsat"_n;
+static constexpr name FEES_CONTRACT = "fees.xsat"_n;
 
 // ACCOUNTS
 static constexpr name VAULT_ACCOUNT = "vault.xsat"_n;

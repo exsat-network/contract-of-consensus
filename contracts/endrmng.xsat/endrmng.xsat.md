@@ -1081,9 +1081,154 @@ $ cleos push action endrmng.xsat evmrestkxsat '["evmutil.xsat", "bb776ae86d59969
 - `{checksum160} staker` - evm staker account
 - `{name} validator` - validator account
 - `{asset} quantity` - staking amount
+- `{checksum160} stake_address` - stake address
+- `{checksum160} reward_address` - reward address
+- `{uint64_t} consecutive_vote_count` - consecutive vote count
+- `{uint64_t} latest_consensus_block` - latest consensus block
+- `{uint8_t} active_flag` - active flag (0: inactive, 1: active, 2: credit staking validator)
+- `{uint32_t} role` - role (0: BTC, 1: XSAT)
 
 ### example
 
 ```bash
 $ cleos push action endrmng.xsat creditstake '["bb776ae86d5996908af46482f24be8ccde2d4c41", "e4d68a77714d9d388d8233bee18d578559950cf5",  "alice", "1.00000000 BTC"]' -p custody.xsat 
+```
+
+## ACTION `newregvldtor`
+
+- **authority**: `validator`
+
+> Register a new validator with additional parameters
+
+### params
+
+- `{name} validator` - validator account
+- `{uint32_t} role` - role (0: BTC, 1: XSAT)
+- `{checksum160} stake_addr` - stake address
+- `{optional<checksum160>} reward_addr` - reward address
+- `{optional<uint16_t>} commission_rate` - commission ratio, decimal is 10^4
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat newregvldtor '["alice", 0, "e4d68a77714d9d388d8233bee18d578559950cf5", "e4d68a77714d9d388d8233bee18d578559950cf5", 2000]' -p alice
+```
+
+## ACTION `evmconfigvald`
+
+- **authority**: `validator`
+
+> Configure validator commission and donate rates
+
+### params
+
+- `{name} validator` - validator account
+- `{optional<uint16_t>} commission_rate` - commission ratio, decimal is 10^4
+- `{optional<uint16_t>} donate_rate` - the donation rate, represented as a percentage
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat evmconfigvald '["alice", 2000, 100]' -p alice
+```
+
+## ACTION `evmsetstaker`
+
+- **authority**: `validator`
+
+> Set validator stake address
+
+### params
+
+- `{name} validator` - validator account
+- `{checksum160} stake_addr` - stake address
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat evmsetstaker '["alice", "e4d68a77714d9d388d8233bee18d578559950cf5"]' -p alice
+```
+
+## ACTION `setrwdaddr`
+
+- **authority**: `validator`
+
+> Set validator reward address
+
+### params
+
+- `{name} validator` - validator account
+- `{checksum160} reward_addr` - reward address
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat setrwdaddr '["alice", "e4d68a77714d9d388d8233bee18d578559950cf5"]' -p alice
+```
+
+## ACTION `setstakebase`
+
+- **authority**: `get_self()`
+
+> Set base stake amounts for validators
+
+### params
+
+- `{asset} xsat_base_stake` - XSAT base stake amount
+- `{asset} btc_base_stake` - BTC base stake amount
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat setstakebase '["2100 XSAT", "100 BTC"]' -p endrmng.xsat
+```
+
+## ACTION `updcreditstk`
+
+- **authority**: `get_self()`
+
+> Update credit staking settings
+
+### params
+
+- `{bool} is_close` - whether to close credit staking
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat updcreditstk '[true]' -p endrmng.xsat
+```
+
+## ACTION `endorse`
+
+- **authority**: `BLOCK_ENDORSE_CONTRACT`
+
+> Endorse a validator for a specific block height
+
+### params
+
+- `{name} validator` - validator account
+- `{uint64_t} height` - block height
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat endorse '["alice", 840000]' -p block_endorse.xsat
+```
+
+## ACTION `setdepproxy`
+
+- **authority**: `get_self()`
+
+> Set deposit proxy accounts
+
+### params
+
+- `{checksum160} btc_deposit_proxy` - BTC deposit proxy
+- `{checksum160} xsat_deposit_proxy` - XSAT deposit proxy
+
+### example
+
+```bash
+$ cleos push action endrmng.xsat setdepproxy '["bb776ae86d5996908af46482f24be8ccde2d4c41", "e4d68a77714d9d388d8233bee18d578559950cf5"]' -p endrmng.xsat
 ```

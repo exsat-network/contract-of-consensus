@@ -7,6 +7,7 @@
 #include <eosio/binary_extension.hpp>
 #include "../internal/defines.hpp"
 #include "../internal/utils.hpp"
+#include "../internal/safemath.hpp"
 
 using namespace eosio;
 using namespace std;
@@ -65,6 +66,23 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         binary_extension<uint16_t> min_donate_rate;
         binary_extension<checksum160> btc_deposit_proxy;
         binary_extension<checksum160> xsat_deposit_proxy;
+        binary_extension<uint64_t> next_credit_weight_block;
+        binary_extension<uint16_t> next_credit_weight;
+        binary_extension<uint64_t> credit_weight;
+
+        uint64_t get_credit_weight(uint64_t height) const {
+
+            if (get_next_credit_block() <= height) {
+                return next_credit_weight.has_value() ? next_credit_weight.value() : RATE_BASE_10000;
+            }
+
+            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+        }
+
+        uint64_t get_next_credit_block() const {
+
+            return next_credit_weight_block.has_value() ? next_credit_weight_block.value() : 999999999999999999ULL;
+        }
     };
     typedef eosio::singleton<"config"_n, config_row> config_table;
 
@@ -384,6 +402,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         // 0: BTC, 1: XSAT
         binary_extension<uint32_t> role;
 
+        binary_extension<uint64_t> credit_weight_block;
+        binary_extension<uint64_t> credit_weight;
+
         uint64_t get_role() const {
             return (role.has_value() && role.value() == 1) ? (XSAT_SCOPE_MASK | (owner.value >> 32)) : (owner.value >> 32);
         }
@@ -397,6 +418,17 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
             return xsat::utils::compute_id(stake_address.value_or());
         }
 
+        uint64_t get_credit_weight() const {
+            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+        }
+
+       uint64_t get_credit_weight_block() const {
+            return credit_weight_block.has_value() ? credit_weight_block.value() : 0;
+        }
+
+        asset get_credit_quantity(const asset& quantity) const {
+            return asset(safemath::muldiv(quantity.amount, get_credit_weight(), RATE_BASE_10000), quantity.symbol);
+        }
     };
     typedef eosio::multi_index<
         "validators"_n, validator_row,
@@ -1140,6 +1172,9 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     [[eosio::on_notify("*::transfer")]]
     void on_transfer(const name& from, const name& to, const asset& quantity, const string& memo);
 
+    [[eosio::action]]
+    void setcreditwei(const uint64_t credit_weight, const uint64_t credit_weight_block);
+
 #ifdef DEBUG
     [[eosio::action]]
     void cleartable(const name table_name, const optional<name> scope, const optional<uint64_t> max_rows);
@@ -1159,6 +1194,23 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         // batch import data to old validators
         for (const auto& validator : validators) {
             _validator.emplace(get_self(), [&](auto& row) { row = validator; });
+        }
+    }
+
+    [[eosio::action]]
+    void delevmstaker(const uint64_t id) {
+        require_auth(get_self());
+        auto itr = _evm_stake.find(id);
+        check(itr != _evm_stake.end(), "endrmng.xsat: [evm_stake] does not exists");
+        _evm_stake.erase(itr);
+    }
+
+    [[eosio::action]]
+    void impevmstaker(const vector<evm_staker_row>& evm_stakers) {
+        require_auth(get_self());
+
+        for (const auto& evm_staker : evm_stakers) {
+            _evm_stake.emplace(get_self(), [&](auto& row) { row = evm_staker; });
         }
     }
 #endif
@@ -1181,7 +1233,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
     void setstakebase(const asset& xsat_base_stake, const asset& btc_base_stake);
 
     [[eosio::action]]
-    void updcreditstk(const bool is_close);
+    void updcreditstk(const name& validator, const bool is_close);
 
     [[eosio::action]]
     void endorse(const name& validator, const uint64_t height);
@@ -1410,7 +1462,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     template <typename T, typename C>
     void staking_change(validator_table::const_iterator& validator_itr, T& _stake, C& stake_itr, const asset& quantity,
-                        const asset& qualification, const optional<uint8_t>& active_flag);
+                        const asset& qualification, const optional<uint8_t>& active_flag, const bool is_credit_staking);
 
     template <typename T, typename C>
     void update_staking_reward(const uint128_t stake_acc_per_share, const uint128_t consensus_acc_per_share,
@@ -1424,6 +1476,8 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
 
     asset get_qualification(const validator_row& validator_itr, const bool is_btc_validator, const checksum160& stake_addr);
 
+    void _creditstake(const checksum160& proxy, const checksum160& staker, const name& validator, const asset& quantity, uint64_t head_height);
+    uint64_t _get_current_credit_weight();
 #ifdef DEBUG
     template <typename T>
     void clear_table(T& table, uint64_t rows_to_clear);

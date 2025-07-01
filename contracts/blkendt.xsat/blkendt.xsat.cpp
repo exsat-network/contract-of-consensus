@@ -12,12 +12,21 @@
 //@auth utxomng.xsat
 [[eosio::action]]
 void block_endorse::erase(const uint64_t height) {
-    require_auth(UTXO_MANAGE_CONTRACT);
+    if (!has_auth(UTXO_MANAGE_CONTRACT)) {
+        require_auth(get_self());
+    }
 
     block_endorse::endorsement_table _endorsement(get_self(), height);
     auto endorsement_itr = _endorsement.begin();
     while (endorsement_itr != _endorsement.end()) {
         endorsement_itr = _endorsement.erase(endorsement_itr);
+    }
+
+    // check xsat consensus active
+    block_endorse::endorsement_table _xsat_endorsement(get_self(), height | XSAT_SCOPE_MASK);
+    auto xsat_endorsement_itr = _xsat_endorsement.begin();
+    while (xsat_endorsement_itr != _xsat_endorsement.end()) {
+        xsat_endorsement_itr = _xsat_endorsement.erase(xsat_endorsement_itr);
     }
 }
 
@@ -122,25 +131,6 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
         is_revote = true;
     }
 
-    // check xsat consensus active
-    if (config.is_xsat_consensus_active(height)) {
-
-        check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
-    }
-
-    // check xsat reward active
-    if (config.is_xsat_reward_active(height)) {
-
-        // check consecutive vote count
-        if (validator_itr->consecutive_vote_count.has_value() && validator_itr->consecutive_vote_count.value() < validator_active_vote_count) {
-
-            // send endrmng.xsat::endorse       
-            endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
-            _endorse.send(validator, height);
-            return;
-        }
-    }
-
     // get endorsement scope
     bool xsat_validator = false;
     if (validator_itr->role.has_value() && validator_itr->role.value() == 1) {
@@ -162,6 +152,38 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
     bool reached_consensus = false;
     bool is_send_endorse = !is_revote;
 
+    // check validator is requested
+    std::vector<requested_validator_info> requested_validators;
+    if (endorsement_itr != endorsement_idx.end()) {
+        requested_validators = endorsement_itr->requested_validators;
+
+    }else{
+        requested_validators = xsat_validator ? get_valid_validator_by_xsat_stake(height, validator_active_vote_count)
+                                    : get_valid_validator_by_btc_stake(height, validator_active_vote_count);
+    }
+    auto is_requested = std::any_of(requested_validators.begin(), requested_validators.end(), [&](const requested_validator_info& a) {
+        return a.account == validator;
+    });
+    
+    auto latest_consensus_block = validator_itr->latest_consensus_block.has_value() ? validator_itr->latest_consensus_block.value() : uint64_t(0);
+    // Not in request list
+    if (!is_requested && 
+        // XSAT reward active
+        config.is_xsat_reward_active(height) && 
+        // validator active vote count is greater than 0
+        validator_active_vote_count > 0 &&
+        // latest consensus block is not the current block
+        height > latest_consensus_block) { 
+                
+        check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
+        check(chain_state.head_height - height  <= (validator_active_vote_count - 1), "1009:blkendt.xsat::endorse: endorse height must be within the last validator_active_vote_count blocks from current head height");
+
+        // send endrmng.xsat::endorse           
+        endorse_manage::endorse_action _endorse(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
+        _endorse.send(validator, height);
+        return;
+    }
+
     auto err_msg = "1005:blkendt.xsat::endorse: validator not in requested_validators list";
     if (endorsement_itr == endorsement_idx.end()) {
         // Verify whether the endorsement time of the next height is reached
@@ -178,12 +200,18 @@ void block_endorse::endorse(const name& validator, const uint64_t height, const 
                           + next_endorse_time.to_string());
             }
         }
+        
+        // check xsat consensus active
+        if (config.is_xsat_consensus_active(height)) {
+
+            check(validator_itr->active_flag.has_value() && validator_itr->active_flag.value() == 1, "1007:blkendt.xsat::endorse: validator is not active");
+        }
 
         // Obtain qualified validators based on the pledge amount.
         // If the block height of the activated xsat pledge amount is reached, directly switch to xsat pledge, otherwise use the btc pledge amount.
-        std::vector<requested_validator_info> requested_validators
-            = xsat_validator ? get_valid_validator_by_xsat_stake(height, validator_active_vote_count)
-                                : get_valid_validator_by_btc_stake(height, validator_active_vote_count);
+        // std::vector<requested_validator_info> requested_validators
+        //     = xsat_validator ? get_valid_validator_by_xsat_stake(height, validator_active_vote_count)
+        //                         : get_valid_validator_by_btc_stake(height, validator_active_vote_count);
 
         check(requested_validators.size() >= config.min_validators,
               "1004:blkendt.xsat::endorse: the number of valid validators must be greater than or equal to "
@@ -301,7 +329,7 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
                 // if latest endorse block is not the current block, that mean the validator is not endorse previous block
                 // so it not consecutive endorse 
                 auto latest_consensus_block = itr->latest_consensus_block.has_value() ? itr->latest_consensus_block.value() : uint64_t(0);
-                if (height - latest_consensus_block > 1) {
+                if (height > latest_consensus_block + 1) {
 
                     itr++;
                     continue;
@@ -353,7 +381,7 @@ std::vector<block_endorse::requested_validator_info> block_endorse::get_valid_va
                  // if latest endorse block is not the current block, that mean the validator is not endorse previous block
                 // so it not consecutive endorse 
                 auto latest_consensus_block = itr->latest_consensus_block.has_value() ? itr->latest_consensus_block.value() : uint64_t(0);
-                if (height - latest_consensus_block > 1) {
+                if (height > latest_consensus_block + 1) {
 
                     itr++;
                     continue;
@@ -382,7 +410,7 @@ void block_endorse::revote(const name& synchronizer, const uint64_t height) {
     utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
     auto chain_state = _chain_state.get();
     check(chain_state.irreversible_height < height && chain_state.migrating_height != height,
-          "1002:blkendt.xsat::revote: the current block is irreversible");
+          "2002:blkendt.xsat::revote: the current block is irreversible");
           
     pool::synchronizer_table _synchronizer(POOL_REGISTER_CONTRACT, POOL_REGISTER_CONTRACT.value);
     auto synchronizer_itr = _synchronizer.require_find(synchronizer.value, "block_endorse::revote: not a synchronizer account");
