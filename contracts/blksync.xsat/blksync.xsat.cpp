@@ -89,7 +89,7 @@ void block_sync::initbucket(const name& synchronizer, const uint64_t height, con
     if (block_bucket_itr == block_bucket_idx.end()) {
         // slot limit
         check(synchronizer_itr->produced_block_limit == 0
-                  || height - synchronizer_itr->latest_produced_block_height <= synchronizer_itr->produced_block_limit,
+                  || height <= synchronizer_itr->produced_block_limit + synchronizer_itr->latest_produced_block_height ,
               "2006:blksync.xsat::initbucket: to become a synchronizer, a block must be produced within 72 hours");
         const auto num_slots = std::distance(_block_bucket.begin(), _block_bucket.end());
         check(num_slots < synchronizer_itr->num_slots,
