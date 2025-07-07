@@ -1,12 +1,16 @@
 #include <custody.xsat/custody.xsat.hpp>
+#include <endrmng.xsat/endrmng.xsat.hpp>
+#include <utxomng.xsat/utxomng.xsat.hpp>
 
 #ifdef DEBUG
 #include <bitcoin/script/address.hpp>
+
 #include "./src/debug.hpp"
 #endif
 
 [[eosio::action]]
-void custody::addcustody(const checksum160 staker, const checksum160 proxy, const name validator, const optional<string> btc_address, optional<vector<uint8_t>> scriptpubkey) {
+void custody::addcustody(const checksum160 staker, const checksum160 proxy, const name validator, const optional<string> btc_address,
+                         optional<vector<uint8_t>> scriptpubkey) {
     require_auth(get_self());
     check(is_account(validator), "custody.xsat::addcustody: validator does not exists");
     check(proxy != checksum160(), "custody.xsat::addcustody: proxy cannot be empty");
@@ -56,12 +60,15 @@ void custody::delcustody(const checksum160 staker) {
     auto staker_itr = staker_idx.require_find(staker_id, "custody.xsat::delcustody: staker does not exists");
     uint64_t current_staking_value = get_current_staking_value(staker_itr);
     if (current_staking_value > 0) {
-        endorse_manage::creditstake_action creditstake(ENDORSER_MANAGE_CONTRACT, { get_self(), "active"_n });
+        endorse_manage::creditstake_action creditstake(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
         creditstake.send(staker_itr->proxy, staker_itr->staker, staker_itr->validator, asset(0, BTC_SYMBOL));
+    }
+    auto enrollment_itr = _enrollment.find(staker_itr->validator.value);
+    if (enrollment_itr != _enrollment.end()) {
+        _enrollment.erase(enrollment_itr);
     }
     staker_idx.erase(staker_itr);
 }
-
 
 [[eosio::action]]
 void custody::creditstake(const checksum160& staker, const uint64_t balance) {
@@ -70,6 +77,91 @@ void custody::creditstake(const checksum160& staker, const uint64_t balance) {
     auto staker_idx = _custody.get_index<"bystaker"_n>();
     auto staker_itr = staker_idx.require_find(staker_id, "custody.xsat::creditstake: staker does not exists");
     handle_staking(staker_itr, balance);
+}
+
+void custody::config(const uint64_t valid_blocks) {
+    require_auth(get_self());
+    check(valid_blocks > 0, "custody.xsat::config: valid_blocks must be greater than 0");
+
+    global_row global = _global.get_or_default();
+    global.valid_blocks = valid_blocks;
+    _global.set(global, get_self());
+}
+
+uint64_t custody::enroll(const name& account) {
+    require_auth(account);
+    endorse_manage::validator_table _validator(ENDORSER_MANAGE_CONTRACT, ENDORSER_MANAGE_CONTRACT.value);
+    auto validator_itr = _validator.require_find(account.value, "custody.xsat::enroll: account is not a validator account");
+    auto active_flag = validator_itr->active_flag.has_value() ? validator_itr->active_flag.value() : 0;
+    auto role = validator_itr->role.has_value() ? validator_itr->role.value() : 0;
+    check(active_flag != 1, "custody.xsat::enroll: account is already actived");
+    check(role == 0, "custody.xsat::enroll: account is not a btc validator account");
+
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+
+    global_row global = _global.get_or_default();
+    uint64_t valid_blocks = global.valid_blocks.has_value() ? global.valid_blocks.value() : 1008;
+
+    const checksum256 transaction_id = xsat::utils::get_trx_id();
+    uint64_t random = 0;
+    memcpy(&random, transaction_id.extract_as_byte_array().data(), sizeof(uint64_t));
+    random = 1000 + (random % 9001);
+
+    auto itr = _enrollment.find(account.value);
+    if (itr != _enrollment.end()) {
+        if (chain_state.head_height <= itr->end_height) {
+            check(itr->is_valid == 2, "custody.xsat::enroll: please wait for the result of the last verification");
+        }
+        _enrollment.modify(itr, same_payer, [&](auto& row) {
+            row.btc_address.clear();
+            row.txid = checksum256();
+            row.start_height = chain_state.head_height;
+            row.end_height = chain_state.head_height + valid_blocks;
+            row.random = random;
+            row.is_valid = 0;
+            row.verification_result = "";
+        });
+    } else {
+        _enrollment.emplace(get_self(), [&](auto& row) {
+            row.account = account;
+            row.random = random;
+            row.start_height = chain_state.head_height;
+            row.end_height = chain_state.head_height + valid_blocks;
+            row.is_valid = 0;
+        });
+    }
+    return random;
+}
+
+void custody::verifytx(const name& account, const string& btc_address, const checksum256& txid, const string& information) {
+    require_auth(account);
+    check(xsat::utils::is_bitcoin_address(btc_address), "custody.xsat::verifytx: invalid bitcoin address");
+    auto enroll_itr = _enrollment.require_find(account.value, "custody.xsat::verifytx: account not enrolled");
+    if (enroll_itr->is_valid == 1) {
+        check(false, "custody.xsat::verifytx: account already verified");
+    } else if (enroll_itr->is_valid == 2) {
+        check(false, "custody.xsat::verifytx: verification failed. please re-verify");
+    }
+    utxo_manage::chain_state_table _chain_state(UTXO_MANAGE_CONTRACT, UTXO_MANAGE_CONTRACT.value);
+    auto chain_state = _chain_state.get();
+    check(chain_state.head_height <= enroll_itr->end_height, "custody.xsat::verifytx: the txid verification has expired; please enroll again");
+
+    _enrollment.modify(enroll_itr, same_payer, [&](auto& row) {
+        row.btc_address = btc_address;
+        row.txid = txid;
+        row.information = information;
+    });
+}
+
+void custody::verifyresult(const name& account, const uint8_t is_valid, const string& verification_result) {
+    require_auth(get_self());
+    check(is_valid == 1 || is_valid == 2, "custody.xsat::verifyresult: is_valid must be 1 or 2");
+    auto enroll_itr = _enrollment.require_find(account.value, "custody.xsat::verifyresult: account not enrolled");
+    _enrollment.modify(enroll_itr, same_payer, [&](auto& row) {
+        row.is_valid = is_valid;
+        row.verification_result = verification_result;
+    });
 }
 
 template <typename T>
@@ -88,7 +180,7 @@ void custody::handle_staking(T& itr, uint64_t balance) {
     check(new_staking_value != current_staking_value, "custody.xsat::handle_staking: no change in staking value");
 
     // credit stake
-    endorse_manage::creditstake_action creditstake(ENDORSER_MANAGE_CONTRACT, { get_self(), "active"_n });
+    endorse_manage::creditstake_action creditstake(ENDORSER_MANAGE_CONTRACT, {get_self(), "active"_n});
     creditstake.send(itr->proxy, itr->staker, itr->validator, asset(new_staking_value, BTC_SYMBOL));
     auto staker_itr = _custody.require_find(itr->id, "custody.xsat::handle_staking: staker does not exists");
     _custody.modify(staker_itr, same_payer, [&](auto& row) {
