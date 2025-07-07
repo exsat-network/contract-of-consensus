@@ -1,11 +1,14 @@
 #pragma once
 
+#include <bitcoin/utility/base58.hpp>
+#include <bitcoin/utility/bech32.hpp>
+#include <cstring>
+#include <eosio/crypto.hpp>
 #include <eosio/eosio.hpp>
 #include <eosio/transaction.hpp>
-#include <eosio/crypto.hpp>
-#include <cstring>
-#include <vector>
 #include <string>
+#include <vector>
+
 #include "defines.hpp"
 
 using namespace eosio;
@@ -124,6 +127,68 @@ namespace xsat::utils {
 
     static bool is_unspendable(const uint64_t height, const vector<uint8_t>& script) {
         return height > GENESIS_ACTIVATION ? is_unspendable_genesis(script) : is_unspendable_legacy(script);
+    }
+
+    static std::vector<uint8_t> convert_bits(const std::vector<uint8_t>& in, int from_bits, int to_bits, bool pad) {
+        int acc = 0;
+        int bits = 0;
+        const int maxv = (1 << to_bits) - 1;
+        const int max_acc = (1 << (from_bits + to_bits - 1)) - 1;
+        std::vector<uint8_t> out;
+
+        for (size_t i = 0; i < in.size(); ++i) {
+            int value = in[i];
+            acc = ((acc << from_bits) | value) & max_acc;
+            bits += from_bits;
+            while (bits >= to_bits) {
+                bits -= to_bits;
+                out.push_back((acc >> bits) & maxv);
+            }
+        }
+
+        if (pad) {
+            if (bits) {
+                out.push_back((acc << (to_bits - bits)) & maxv);
+            }
+        } else if (bits >= from_bits || ((acc << (to_bits - bits)) & maxv)) {
+            return {};
+        }
+
+        return out;
+    }
+
+    static bool is_bitcoin_address(const string& address) {
+        if (address.length() < 25) {
+            return false;
+        }
+        // Bech32 address check
+        if (address.substr(0, 2) == "bc" || address.substr(0, 2) == "tb") {
+            bitcoin::bech32::DecodeResult decoded = bitcoin::bech32::Decode(address);
+            if (decoded.encoding == bitcoin::bech32::Encoding::INVALID) {
+                return false;
+            }
+            if (decoded.hrp != "bc" && decoded.hrp != "tb" && decoded.hrp != "bcrt") {
+                return false;
+            }
+            std::vector<uint8_t> witness_program_5bit(decoded.data.begin() + 1, decoded.data.end());
+            std::vector<uint8_t> witness_program_8bit = convert_bits(witness_program_5bit, 5, 8, false);
+            return !witness_program_8bit.empty();
+        }
+
+        // Base58Check address check
+        std::vector<unsigned char> decoded;
+        bool success = bitcoin::DecodeBase58Check(address, decoded, 100);
+        if (!success) {
+            return false;
+        }
+        if (decoded.empty()) {
+            return false;
+        }
+        // Check for valid Base58Check address types
+        if (decoded[0] == 0x00 || decoded[0] == 0x6f || decoded[0] == 0x05 || decoded[0] == 0xc4) {
+            return true;
+        }
+        return false;
     }
 
     template <typename T>
