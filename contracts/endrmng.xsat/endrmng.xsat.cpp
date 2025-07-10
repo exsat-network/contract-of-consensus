@@ -1337,7 +1337,7 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         row.quantity.amount = quantity.amount;
     });
 
-    if (credit_weight != new_credit_weight || !validator_itr->credit_weight.has_value() || validator_itr->credit_weight.value() == 0){
+    if (credit_weight != new_credit_weight){
         // Modify the validator's credit stake weight
         _validator.modify(validator_itr, get_self(), [&](auto& row) {
             row.credit_weight = new_credit_weight;
