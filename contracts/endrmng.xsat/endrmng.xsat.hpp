@@ -76,7 +76,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
                 return next_credit_weight.has_value() ? next_credit_weight.value() : RATE_BASE_10000;
             }
 
-            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+            return (credit_weight.has_value() && credit_weight.value() > 0) ? credit_weight.value() : RATE_BASE_10000;
         }
 
         uint64_t get_next_credit_block() const {
@@ -419,7 +419,7 @@ class [[eosio::contract("endrmng.xsat")]] endorse_manage : public contract {
         }
 
         uint64_t get_credit_weight() const {
-            return credit_weight.has_value() ? credit_weight.value() : RATE_BASE_10000;
+            return (credit_weight.has_value() && credit_weight.value() > 0) ? credit_weight.value() : RATE_BASE_10000;
         }
 
        uint64_t get_credit_weight_block() const {

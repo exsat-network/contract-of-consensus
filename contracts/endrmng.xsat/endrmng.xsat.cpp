@@ -1855,6 +1855,11 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
             lb++;
             continue;
         }
+
+        if (lb->quantity.amount == 0) {
+            lb++;
+            continue;
+        }
         
         // update credit stake weight
         asset quantity = asset{lb->quantity.amount, lb->quantity.symbol};
