@@ -1297,7 +1297,7 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
     }
     uint64_t credit_weight = validator_itr->get_credit_weight();
     auto old_weight_quantity = asset(safemath::muldiv(old_quantity.amount, credit_weight, RATE_BASE_10000), old_quantity.symbol);
-    
+
     uint64_t new_credit_weight = config.get_credit_weight(head_height);
     auto weight_quantity = asset(safemath::muldiv(quantity.amount, new_credit_weight, RATE_BASE_10000), quantity.symbol);
 
@@ -1337,7 +1337,7 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
         row.quantity.amount = quantity.amount;
     });
 
-    if (credit_weight != new_credit_weight){
+    if (credit_weight != new_credit_weight || !validator_itr->credit_weight.has_value() || validator_itr->credit_weight.value() == 0){
         // Modify the validator's credit stake weight
         _validator.modify(validator_itr, get_self(), [&](auto& row) {
             row.credit_weight = new_credit_weight;
