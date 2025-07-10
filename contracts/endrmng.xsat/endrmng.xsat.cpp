@@ -1297,7 +1297,7 @@ void endorse_manage::_creditstake(const checksum160& proxy, const checksum160& s
     }
     uint64_t credit_weight = validator_itr->get_credit_weight();
     auto old_weight_quantity = asset(safemath::muldiv(old_quantity.amount, credit_weight, RATE_BASE_10000), old_quantity.symbol);
-    
+
     uint64_t new_credit_weight = config.get_credit_weight(head_height);
     auto weight_quantity = asset(safemath::muldiv(quantity.amount, new_credit_weight, RATE_BASE_10000), quantity.symbol);
 
@@ -1852,6 +1852,11 @@ void endorse_manage::endorse(const name& validator, const uint64_t height) {
         auto credit_proxy_itr = credit_proxy_idx.find(xsat::utils::compute_id(lb->proxy));
         auto is_credit_staking = credit_proxy_itr != credit_proxy_idx.end();
         if (!is_credit_staking) {
+            lb++;
+            continue;
+        }
+
+        if (lb->quantity.amount == 0) {
             lb++;
             continue;
         }
