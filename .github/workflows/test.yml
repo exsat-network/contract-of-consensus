@@ -22,7 +22,7 @@ jobs:
         apt-get update
         apt-get install -y wget build-essential
         wget https://github.com/AntelopeIO/cdt/releases/download/v4.1.1/cdt_4.1.1-1_amd64.deb
-        apt-get install -y ./cdt_4.1.1_amd64.deb
+        apt-get install -y ./cdt_4.1.1-1_amd64.deb
         
     - name: Install npm dependencies
       run: npm ci
