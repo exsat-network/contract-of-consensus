@@ -28,7 +28,9 @@ jobs:
       run: npm ci
       
     - name: Build contracts for testing
-      run: npm run test_build
+      run: |
+        mkdir -p tests/wasm
+        npm run test_build
       
     - name: Run unit tests
       run: npm run test
