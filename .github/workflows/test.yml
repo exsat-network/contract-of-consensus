@@ -1,0 +1,35 @@
+name: Unit Tests
+
+on:
+  pull_request:
+    branches: [ main, dev ]
+  push:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-20.04
+    container: node:18-bullseye
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Install EOSIO CDT
+      run: |
+        apt-get update
+        apt-get install -y wget build-essential
+        wget https://github.com/AntelopeIO/cdt/releases/download/v4.1.1/cdt_4.1.1_amd64.deb
+        apt-get install -y ./cdt_4.1.1_amd64.deb
+        
+    - name: Install npm dependencies
+      run: npm ci
+      
+    - name: Build contracts for testing
+      run: npm run test_build
+      
+    - name: Run unit tests
+      run: npm run test
+      
